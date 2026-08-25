@@ -1,0 +1,5 @@
+// Initial value; Clavis may replace this file at runtime.
+cursor {
+    xcursor-theme "Adwaita"
+    xcursor-size 12
+}

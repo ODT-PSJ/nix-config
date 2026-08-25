@@ -1,0 +1,138 @@
+diff --git a/Modules/Bar/QuickSettings/PowerProfile.qml b/Modules/Bar/QuickSettings/PowerProfile.qml
+new file mode 100644
+index 0000000..421a3ea
+--- /dev/null
++++ b/Modules/Bar/QuickSettings/PowerProfile.qml
+@@ -0,0 +1,120 @@
++import QtQuick
++import Quickshell.Io
++import qs.Common
++import qs.Components
++import qs.Widgets.common
++
++Item {
++    id: root
++
++    property string profile: "Balanced"
++    property bool isHovered: mouseArea.containsMouse
++    property bool available: true
++    readonly property int buttonSize: 28
++    readonly property int hoverButtonSize: 34
++    readonly property string icon: {
++        if (profile === "Performance")
++            return "rocket_launch"
++        if (profile === "Quiet")
++            return "mode_fan_off"
++        return "speed"
++    }
++    readonly property color profileColor: {
++        if (!available)
++            return Appearance.colors.colSurfaceContainerHighest
++        if (profile === "Performance")
++            return Appearance.colors.colError
++        if (profile === "Quiet")
++            return Appearance.colors.colTertiaryContainer
++        return Appearance.colors.colPrimaryContainer
++    }
++    readonly property color iconColor: {
++        if (!available)
++            return Appearance.colors.colOnSurfaceVariant
++        if (profile === "Performance")
++            return Appearance.colors.colOnError
++        if (profile === "Quiet")
++            return Appearance.colors.colOnTertiaryContainer
++        return Appearance.colors.colOnPrimaryContainer
++    }
++
++    implicitHeight: buttonSize
++    implicitWidth: buttonSize
++
++    function refresh() {
++        if (!queryProcess.running)
++            queryProcess.running = true
++    }
++
++    Component.onCompleted: refresh()
++
++    Rectangle {
++        anchors.centerIn: parent
++        width: root.isHovered ? root.hoverButtonSize : root.buttonSize
++        height: width
++        radius: height / 2
++        color: root.profileColor
++
++        Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
++        Behavior on color { ColorAnimation { duration: 200 } }
++
++        MaterialSymbol {
++            anchors.centerIn: parent
++            text: root.icon
++            iconSize: root.isHovered ? 20 : 18
++            fill: root.profile === "Performance" ? 1 : 0
++            color: root.iconColor
++
++            Behavior on iconSize { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
++        }
++    }
++
++    MouseArea {
++        id: mouseArea
++        anchors.fill: parent
++        enabled: root.available && !switchProcess.running
++        hoverEnabled: true
++        cursorShape: Qt.PointingHandCursor
++        onClicked: switchProcess.running = true
++    }
++
++    PopupToolTip {
++        extraVisibleCondition: mouseArea.containsMouse
++        text: root.available
++            ? qsTr("电源模式: ") + root.profile + qsTr("\n单击切换")
++            : qsTr("ASUS 电源模式不可用")
++    }
++
++    Process {
++        id: queryProcess
++        command: ["asusctl", "profile", "get"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const match = this.text.match(/Active profile: *(Quiet|Balanced|Performance)/)
++                root.available = match !== null
++                if (match)
++                    root.profile = match[1]
++            }
++        }
++        onExited: exitCode => root.available = exitCode === 0 && root.available
++    }
++
++    Process {
++        id: switchProcess
++        command: ["asusctl", "profile", "next"]
++        onExited: refreshDelay.restart()
++    }
++
++    Timer {
++        interval: 10000
++        running: true
++        repeat: true
++        onTriggered: root.refresh()
++    }
++
++    Timer {
++        id: refreshDelay
++        interval: 250
++        onTriggered: root.refresh()
++    }
++}
+diff --git a/Modules/Bar/QuickSettings/QuickSettings.qml b/Modules/Bar/QuickSettings/QuickSettings.qml
+index ab7a55a..53ec3b2 100644
+--- a/Modules/Bar/QuickSettings/QuickSettings.qml
++++ b/Modules/Bar/QuickSettings/QuickSettings.qml
+@@ -54,6 +54,7 @@ Item {
+         Microphone {
+             screen: root.screen
+         }
++        PowerProfile {}
+         SettingsButton {
+             screen: root.screen
+         }

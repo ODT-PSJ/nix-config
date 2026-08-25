@@ -1,0 +1,49 @@
+diff --git a/Modules/Bar/Tray/TrayItem.qml b/Modules/Bar/Tray/TrayItem.qml
+index 938c32f..aae85a6 100644
+--- a/Modules/Bar/Tray/TrayItem.qml
++++ b/Modules/Bar/Tray/TrayItem.qml
+@@ -4,6 +4,8 @@ import Quickshell.Services.SystemTray
+ import Quickshell.Widgets
+ import qs.Services
+ import qs.Widgets.common
++import qs.Common
++import qs.Components
+
+ MouseArea {
+     id: root
+@@ -14,6 +15,8 @@ MouseArea {
+     signal menuOpened(var qsWindow)
+     signal menuClosed()
+
++    readonly property bool isFcitx: String(root.modelData.id || "").toLowerCase().indexOf("fcitx") !== -1
++
+     implicitWidth: 20
+     implicitHeight: 20
+     hoverEnabled: true
+@@ -84,14 +88,25 @@ MouseArea {
+     IconImage {
+         id: trayIcon
+
+-        source: root.modelData.icon || ""
++        readonly property string iconSource: String(root.modelData.icon || "")
++
++        source: iconSource
+         anchors.centerIn: parent
+         width: parent.width
+         height: parent.height
++        visible: !root.isFcitx && iconSource !== "" && status !== Image.Error
+         asynchronous: true
+         mipmap: true
+     }
+
++    MaterialSymbol {
++        anchors.centerIn: parent
++        visible: root.isFcitx || trayIcon.iconSource === "" || trayIcon.status === Image.Error
++        text: "keyboard"
++        iconSize: 18
++        color: Appearance.colors.colOnLayer0
++    }
++
+     PopupToolTip {
+         extraVisibleCondition: root.containsMouse
+         text: TrayService.getTooltipForItem(root.modelData)

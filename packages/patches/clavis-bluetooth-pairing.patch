@@ -1,0 +1,21 @@
+diff --git a/Services/BluetoothService.qml b/Services/BluetoothService.qml
+--- a/Services/BluetoothService.qml
++++ b/Services/BluetoothService.qml
+@@ -485,10 +485,6 @@
+                 root._pendingPairingStarted = true;
+             else if (root._pendingOperation === "cancel-pair")
+                 root._finishOperationSucceeded();
+-            else if (root._pendingOperation === "pair"
+-                    && root._pendingPairingStarted
+-                    && !root._pendingDevice.paired)
+-                root._finishOperationFailed(qsTr("配对失败；需要 PIN/Passkey 交互的设备将在第二阶段支持"));
+         }
+
+         function onPairedChanged() {
+@@ -532,7 +528,7 @@
+         id: operationTimeout
+         interval: 60000
+         repeat: false
+-        onTriggered: root._finishOperationFailed(qsTr("蓝牙操作超时；当前 Quickshell API 未提供更详细的 BlueZ 错误"))
++        onTriggered: root._finishOperationFailed(qsTr("蓝牙配对或连接超时；请确认设备处于配对模式并重试"))
+     }

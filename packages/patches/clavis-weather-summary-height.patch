@@ -1,0 +1,17 @@
+diff --git a/Modules/Sidebars/Left/WeatherView.qml b/Modules/Sidebars/Left/WeatherView.qml
+index 8a8ec6d..b797f59 100644
+--- a/Modules/Sidebars/Left/WeatherView.qml
++++ b/Modules/Sidebars/Left/WeatherView.qml
+@@ -436,9 +436,11 @@ Item {
+
+                 Item {
+                     width: parent.width
+-                    height: Math.max(220, flick.height - 452 - 286 - contentColumn.spacing * 2)
++                    height: Math.max(currentSummaryColumn.implicitHeight + 24,
++                                     flick.height - 452 - 286 - contentColumn.spacing * 2)
+
+                     Column {
++                        id: currentSummaryColumn
+                         anchors.left: parent.left
+                         anchors.right: parent.right
+                         anchors.verticalCenter: parent.verticalCenter

@@ -1,0 +1,83 @@
+diff --git a/Modules/QuickSettings/QuickSliders.qml b/Modules/QuickSettings/QuickSliders.qml
+index ddb7c70..d4cfb10 100644
+--- a/Modules/QuickSettings/QuickSliders.qml
++++ b/Modules/QuickSettings/QuickSliders.qml
+@@ -34,23 +34,11 @@
+
+         QuickMaterialSlider {
+             materialSymbol: "light_mode"
++            stepSize: 0.01
+-            secondaryMaterialSymbol: "wb_twilight"
+-            secondaryIconLocation: root.gammaCutoff
+-            stopIndicatorValues: Wlsunset.gamma !== 100 && root.brightnessValue > 0 ? [root.gammaCutoff + root.brightnessValue * (1 - root.gammaCutoff)] : []
+-            value: Wlsunset.gamma === 100 ? root.gammaCutoff + root.brightnessValue * (1 - root.gammaCutoff) : (Wlsunset.gamma - Wlsunset.gammaLowerLimit) / (100 - Wlsunset.gammaLowerLimit) * root.gammaCutoff
+-            percentText: Wlsunset.gamma === 100 ? `${Math.round(root.brightnessValue * 100)}%` : `${Wlsunset.gamma}%`
+-            tooltipContent: Wlsunset.gamma === 100 ? `${Math.round(root.brightnessValue * 100)}%` : `Gamma ${Wlsunset.gamma}%`
+-            onMoved: {
+-                if (value >= root.gammaCutoff) {
+-                    Brightness.setBrightnessForScreen(root.screen, (value - root.gammaCutoff) / (1 - root.gammaCutoff));
+-                    if (Wlsunset.gamma !== 100)
+-                        Wlsunset.setGamma(100);
+-                } else {
+-                    if (root.brightnessValue > 0)
+-                        Brightness.setBrightnessForScreen(root.screen, 0, true);
+-                    Wlsunset.setGamma(value / root.gammaCutoff * (100 - Wlsunset.gammaLowerLimit) + Wlsunset.gammaLowerLimit);
+-                }
+-            }
++            value: root.brightnessValue
++            percentText: `${Math.round(root.brightnessValue * 100)}%`
++            tooltipContent: `${Math.round(root.brightnessValue * 100)}%`
++            onMoved: Brightness.setBrightnessForScreen(root.screen, value)
+         }
+
+         QuickMaterialSlider {
+diff --git a/Services/Brightness.qml b/Services/Brightness.qml
+index 16e66f2..9d2c483 100644
+--- a/Services/Brightness.qml
++++ b/Services/Brightness.qml
+@@ -11,7 +11,7 @@
+
+     property var ddcMonitors: []
+     property var pendingDdcMonitors: []
+-    property real fallbackBrightnessValue: 0.5
++    property real fallbackBrightnessValue: 1.0
+     property var monitors: []
+     property string focusedScreenName: ""
+     readonly property var activeScreen: root.getScreenByName(root.focusedScreenName) || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
+@@ -268,6 +268,9 @@
+                     return;
+                 }
+
++                if (!isDdc)
++                    return;
++
+                 const parts = data.split(",");
+                 if (parts.length < 5)
+                     return;
+@@ -281,7 +284,10 @@
+             }
+
+             function setBrightness(value, allowZero) {
+-                brightness = root.clampBrightness(value, allowZero);
++                const minimumBrightness = isDdc ? 0.01 : 0.10;
++                brightness = Math.max(
++                    minimumBrightness,
++                    root.clampBrightness(value, allowZero));
+             }
+
+             function scheduleSync() {
+@@ -299,8 +305,12 @@
+                     return;
+                 }
+
+-                const percent = Math.round(safeBrightness * 100);
+-                setProcess.exec(["brightnessctl", "--class", "backlight", "s", percent + "%", "--quiet"]);
++                const outputPath = "/outputs/" + root.normalizeConnectorName(screenName).replace(/-/g, "_");
++                setProcess.exec([
++                    "busctl", "--user", "set-property",
++                    "rs.wl-gammarelay", outputPath, "rs.wl.gammarelay",
++                    "Brightness", "d", safeBrightness.toFixed(3)
++                ]);
+             }
+
+             readonly property Process readProcess: Process {

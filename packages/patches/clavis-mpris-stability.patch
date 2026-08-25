@@ -1,0 +1,233 @@
+diff --git a/Modules/Keystone/DashboardContent/DashboardMediaCard.qml b/Modules/Keystone/DashboardContent/DashboardMediaCard.qml
+--- a/Modules/Keystone/DashboardContent/DashboardMediaCard.qml
++++ b/Modules/Keystone/DashboardContent/DashboardMediaCard.qml
+@@ -26,8 +26,16 @@ Item {
+     readonly property real progress: hasPlayer && player.length > 0
+         ? Math.max(0, Math.min(1, currentPosition / player.length)) : 0
+
++    function playerPosition() {
++        try {
++            return root.hasPlayer ? Math.max(0, Number(root.player.position) || 0) : 0;
++        } catch (error) {
++            return 0;
++        }
++    }
++
+     function syncPosition() {
+-        currentPosition = hasPlayer ? Math.max(0, Number(player.position) || 0) : 0;
++        currentPosition = playerPosition();
+     }
+
+     onPlayerChanged: syncPosition()
+diff --git a/Modules/Keystone/DashboardContent/DashboardMediaControls.qml b/Modules/Keystone/DashboardContent/DashboardMediaControls.qml
+--- a/Modules/Keystone/DashboardContent/DashboardMediaControls.qml
++++ b/Modules/Keystone/DashboardContent/DashboardMediaControls.qml
+@@ -1,6 +1,7 @@
+ import QtQuick
+ import qs.Common
+ import qs.Components
++import qs.Services
+ import qs.Widgets.common
+
+ // Adapted from Caelestia Shell's ButtonRow and shape-morphing IconButton (GPL-3.0).
+@@ -79,7 +80,7 @@ Item {
+         iconName: "skip_previous"
+         primaryButton: false
+         enabled: root.hasPlayer && root.player.canGoPrevious
+-        onClicked: if (root.player) root.player.previous()
++        onClicked: MediaManager.invoke("previous", root.player)
+     }
+
+     ControlButton {
+@@ -93,7 +94,7 @@ Item {
+         primaryButton: true
+         compactRadius: root.isPlaying
+         enabled: root.hasPlayer && root.player.canTogglePlaying
+-        onClicked: if (root.player) root.player.togglePlaying()
++        onClicked: MediaManager.invoke("togglePlaying", root.player)
+     }
+
+     ControlButton {
+@@ -106,6 +107,6 @@ Item {
+         iconName: "skip_next"
+         primaryButton: false
+         enabled: root.hasPlayer && root.player.canGoNext
+-        onClicked: if (root.player) root.player.next()
++        onClicked: MediaManager.invoke("next", root.player)
+     }
+ }
+diff --git a/Modules/Keystone/Media/Media.qml b/Modules/Keystone/Media/Media.qml
+--- a/Modules/Keystone/Media/Media.qml
++++ b/Modules/Keystone/Media/Media.qml
+@@ -106,6 +106,14 @@ Item {
+                 AudioSpectrum.release(root.spectrumToken);
+         }
+     }
++
++    function playerPosition() {
++        try {
++            return root.player ? Math.max(0, Number(root.player.position) || 0) : 0;
++        } catch (error) {
++            return 0;
++        }
++    }
+
+     property double currentPos: 0
+     Timer {
+@@ -114,7 +122,7 @@ Item {
+         repeat: true
+         onTriggered: {
+             if (root.player && !mediaProgress.pressed) {
+-                root.currentPos = root.player.position;
++                root.currentPos = root.playerPosition();
+                 if (root.showLyrics && lyricsModel.count > 0) {
+                     let pos = root.currentPos;
+                     let newIdx = 0;
+@@ -173,8 +181,11 @@ Item {
+                 width: parent.width * 1.5
+                 height: parent.height * 1.5
+                 source: root.artUrl
++                sourceSize: Qt.size(1440, 960)
+                 fillMode: Image.PreserveAspectCrop
+                 visible: false
++                asynchronous: true
++                cache: false
+             }
+
+             MultiEffect {
+@@ -406,10 +417,13 @@ Item {
+                 playHoverScale: 1.05
+                 morphEnabled: true
+
+-                onShuffleClicked: if (root.player && root.player.shuffleSupported) root.player.shuffle = !root.player.shuffle
+-                onPreviousClicked: if (root.player) root.player.previous()
+-                onPlayPauseClicked: if (root.player) root.player.togglePlaying()
+-                onNextClicked: if (root.player) root.player.next()
++                onShuffleClicked: {
++                    if (root.player && root.player.shuffleSupported)
++                        root.player.shuffle = !root.player.shuffle;
++                }
++                onPreviousClicked: MediaManager.invoke("previous", root.player)
++                onPlayPauseClicked: MediaManager.invoke("togglePlaying", root.player)
++                onNextClicked: MediaManager.invoke("next", root.player)
+                 onLoopClicked: {
+                     if (!root.player || !root.player.loopSupported)
+                         return;
+diff --git a/Modules/Keystone/MediaContent/MediaContent.qml b/Modules/Keystone/MediaContent/MediaContent.qml
+--- a/Modules/Keystone/MediaContent/MediaContent.qml
++++ b/Modules/Keystone/MediaContent/MediaContent.qml
+@@ -240,10 +240,14 @@ Item {
+                 pausedFg: Appearance.colors.colOnSecondaryContainer
+                 morphEnabled: true
+
+-                onShuffleClicked: if (MediaManager.active && MediaManager.active.shuffleSupported) MediaManager.active.shuffle = !MediaManager.active.shuffle
+-                onPreviousClicked: if (MediaManager.active) MediaManager.active.previous()
+-                onPlayPauseClicked: if (MediaManager.active) MediaManager.active.togglePlaying()
+-                onNextClicked: if (MediaManager.active) MediaManager.active.next()
++                onShuffleClicked: {
++                    const player = MediaManager.active;
++                    if (player && player.shuffleSupported)
++                        player.shuffle = !player.shuffle;
++                }
++                onPreviousClicked: MediaManager.invoke("previous")
++                onPlayPauseClicked: MediaManager.invoke("togglePlaying")
++                onNextClicked: MediaManager.invoke("next")
+                 onLoopClicked: {
+                     if (!MediaManager.active || !MediaManager.active.loopSupported)
+                         return;
+diff --git a/Modules/Lock/Cards/MediaCard.qml b/Modules/Lock/Cards/MediaCard.qml
+--- a/Modules/Lock/Cards/MediaCard.qml
++++ b/Modules/Lock/Cards/MediaCard.qml
+@@ -152,7 +152,7 @@ Rectangle {
+                 canUse: root.hasMedia
+                 onClicked: {
+                     if (root.player)
+-                        root.player.previous();
++                        MediaManager.invoke("previous", root.player);
+                 }
+             }
+
+@@ -185,7 +185,7 @@ Rectangle {
+                 iconInCurve: Appearance.animation.standardDecel.bezierCurve
+                 onClicked: {
+                     if (root.player)
+-                        root.player.togglePlaying();
++                        MediaManager.invoke("togglePlaying", root.player);
+                 }
+             }
+
+@@ -194,7 +194,7 @@ Rectangle {
+                 canUse: root.hasMedia
+                 onClicked: {
+                     if (root.player)
+-                        root.player.next();
++                        MediaManager.invoke("next", root.player);
+                 }
+             }
+         }
+diff --git a/Services/MediaManager.qml b/Services/MediaManager.qml
+--- a/Services/MediaManager.qml
++++ b/Services/MediaManager.qml
+@@ -12,6 +12,62 @@ Item {
+
+     // 保存用户手动指定的播放器
+     property var manualActive: null
++    property var pendingPlayer: null
++    property string pendingMethod: ""
++    property bool commandBusy: false
++
++    function containsPlayer(player) {
++        const players = Mpris.players.values;
++        for (let index = 0; index < players.length; index++) {
++            if (players[index] === player)
++                return true;
++        }
++        return false;
++    }
++
++    function invoke(method, player) {
++        const target = player || root.active;
++        if (!target || !method || root.commandBusy)
++            return false;
++
++        root.pendingPlayer = target;
++        root.pendingMethod = String(method);
++        root.commandBusy = true;
++        commandDispatch.restart();
++        return true;
++    }
++
++    Timer {
++        id: commandDispatch
++        interval: 0
++        repeat: false
++        onTriggered: {
++            const target = root.pendingPlayer;
++            const method = root.pendingMethod;
++            root.pendingPlayer = null;
++            root.pendingMethod = "";
++
++            if (!target || !root.containsPlayer(target)
++                    || typeof target[method] !== "function") {
++                commandCooldown.restart();
++                return;
++            }
++
++            try {
++                target[method]();
++            } catch (error) {
++                console.warn("MPRIS command failed:", method, error);
++            }
++            commandCooldown.restart();
++        }
++    }
++
++    Timer {
++        id: commandCooldown
++        interval: 350
++        repeat: false
++        onTriggered: root.commandBusy = false
++    }
+
+     // 核心计算逻辑：优先手动指定 -> 正在播放的 -> 列表第一个 -> null
+     readonly property MprisPlayer active: {

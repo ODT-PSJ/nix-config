@@ -1,0 +1,313 @@
+diff --git a/Modules/Sidebars/Right/NetworkContent.qml b/Modules/Sidebars/Right/NetworkContent.qml
+index 23a092d..0bd3f39 100644
+--- a/Modules/Sidebars/Right/NetworkContent.qml
++++ b/Modules/Sidebars/Right/NetworkContent.qml
+@@ -84,6 +84,12 @@ WidgetPanel {
+         NetworkService.requestScan();
+     }
+
++    function openHiddenNetworkDialog() {
++        if (!root.networkUsable || NetworkService.busy)
++            return;
++        hiddenNetworkDialog.open();
++    }
++
+     function connectivityText() {
+         if (NetworkService.captivePortal)
+             return qsTr("需要登录网络门户");
+@@ -360,6 +366,13 @@ WidgetPanel {
+                         iconName: "search_off"
+                         title: qsTr("未发现可选网络")
+                     }
++
++                    DialogActionButton {
++                        Layout.fillWidth: true
++                        enabled: !NetworkService.busy
++                        text: qsTr("连接隐藏网络")
++                        onClicked: root.openHiddenNetworkDialog()
++                    }
+                 }
+
+                 Item {
+@@ -370,6 +383,171 @@ WidgetPanel {
+         }
+     }
+
++    Dialog {
++        id: hiddenNetworkDialog
++
++        property bool secureNetwork: true
++        property bool showPassword: false
++        readonly property bool canSubmit: hiddenSsidField.text.trim().length > 0
++            && (!secureNetwork || hiddenPasswordField.text.length >= 8)
++
++        function submit() {
++            if (!canSubmit || NetworkService.busy)
++                return;
++            NetworkService.connectHiddenNetwork(hiddenSsidField.text, {
++                "secure": secureNetwork,
++                "password": secureNetwork ? hiddenPasswordField.text : ""
++            });
++            close();
++        }
++
++        modal: true
++        dim: true
++        width: Math.min(360, root.width - 48)
++        x: Math.round((root.width - width) / 2)
++        y: Math.round((root.height - height) / 2)
++        padding: Appearance.spacing.medium
++        Material.theme: Material.System
++        Material.accent: Appearance.colors.colPrimary
++
++        Overlay.modal: Rectangle {
++            color: Appearance.applyAlpha(Appearance.m3colors.m3scrim, 0.42)
++        }
++
++        onOpened: Qt.callLater(() => hiddenSsidField.forceActiveFocus())
++        onClosed: {
++            hiddenSsidField.text = "";
++            hiddenPasswordField.text = "";
++            secureNetwork = true;
++            showPassword = false;
++        }
++
++        background: Rectangle {
++            radius: Appearance.rounding.veryLarge
++            color: Appearance.colors.colLayer3Base
++            border.width: 1
++            border.color: Appearance.colors.colLayer0Border
++        }
++
++        header: Text {
++            text: qsTr("连接隐藏网络")
++            color: Appearance.colors.colOnLayer2
++            font.family: Sizes.fontFamily
++            font.pixelSize: 18
++            font.weight: Font.DemiBold
++            leftPadding: Appearance.spacing.medium
++            rightPadding: Appearance.spacing.medium
++            topPadding: Appearance.spacing.medium
++        }
++
++        contentItem: ColumnLayout {
++            spacing: Appearance.spacing.medium
++
++            Text {
++                Layout.fillWidth: true
++                text: qsTr("请输入准确的网络名称和安全信息。")
++                color: Appearance.colors.colOnLayer1
++                font.family: Sizes.fontFamily
++                font.pixelSize: 13
++                wrapMode: Text.Wrap
++            }
++
++            MaterialTextField {
++                id: hiddenSsidField
++
++                Layout.fillWidth: true
++                placeholderText: qsTr("网络名称（SSID）")
++                enabled: !NetworkService.busy
++                onAccepted: {
++                    if (hiddenNetworkDialog.secureNetwork)
++                        hiddenPasswordField.forceActiveFocus();
++                    else
++                        hiddenNetworkDialog.submit();
++                }
++            }
++
++            RowLayout {
++                Layout.fillWidth: true
++                spacing: Appearance.spacing.small
++
++                ColumnLayout {
++                    Layout.fillWidth: true
++                    spacing: 2
++
++                    Text {
++                        text: qsTr("WPA/WPA2 Personal")
++                        color: Appearance.colors.colOnLayer1
++                        font.family: Sizes.fontFamily
++                        font.pixelSize: 13
++                    }
++
++                    Text {
++                        text: hiddenNetworkDialog.secureNetwork
++                            ? qsTr("使用密码连接") : qsTr("开放网络，不使用密码")
++                        color: Appearance.colors.colOnSurfaceVariant
++                        font.family: Sizes.fontFamily
++                        font.pixelSize: 12
++                    }
++                }
++
++                StyledSwitch {
++                    checked: hiddenNetworkDialog.secureNetwork
++                    enabled: !NetworkService.busy
++                    Accessible.name: qsTr("隐藏网络密码保护")
++                    onToggled: hiddenNetworkDialog.secureNetwork = checked
++                }
++            }
++
++            RowLayout {
++                Layout.fillWidth: true
++                visible: hiddenNetworkDialog.secureNetwork
++                spacing: Appearance.spacing.xSmall
++
++                MaterialTextField {
++                    id: hiddenPasswordField
++
++                    Layout.fillWidth: true
++                    placeholderText: qsTr("网络密码（至少 8 个字符）")
++                    echoMode: hiddenNetworkDialog.showPassword
++                        ? TextInput.Normal : TextInput.Password
++                    inputMethodHints: Qt.ImhSensitiveData
++                    enabled: !NetworkService.busy
++                    onAccepted: hiddenNetworkDialog.submit()
++                }
++
++                ToolButton {
++                    Layout.preferredWidth: 40
++                    Layout.preferredHeight: 40
++                    Accessible.name: hiddenNetworkDialog.showPassword
++                        ? qsTr("隐藏密码") : qsTr("显示密码")
++                    onClicked: hiddenNetworkDialog.showPassword = !hiddenNetworkDialog.showPassword
++
++                    contentItem: MaterialSymbol {
++                        text: hiddenNetworkDialog.showPassword ? "visibility_off" : "visibility"
++                        iconSize: 20
++                        color: Appearance.colors.colOnLayer1
++                    }
++                }
++            }
++        }
++
++        footer: RowLayout {
++            spacing: Appearance.spacing.small
++
++            Item { Layout.fillWidth: true }
++            DialogActionButton {
++                text: qsTr("取消")
++                onClicked: hiddenNetworkDialog.close()
++            }
++            DialogActionButton {
++                text: qsTr("连接")
++                filled: true
++                enabled: hiddenNetworkDialog.canSubmit && !NetworkService.busy
++                onClicked: hiddenNetworkDialog.submit()
++            }
++        }
++    }
++
+     Dialog {
+         id: forgetDialog
+
+diff --git a/Services/NetworkService.qml b/Services/NetworkService.qml
+index 7a764ff..ab097cd 100644
+--- a/Services/NetworkService.qml
++++ b/Services/NetworkService.qml
+@@ -2,6 +2,7 @@ pragma Singleton
+
+ import QtQuick
+ import Quickshell
++import Quickshell.Io
+ import Quickshell.Networking
+
+ Singleton {
+@@ -26,6 +27,7 @@ Singleton {
+     property string lastError: ""
+     property string passwordRequestSsid: ""
+     property string connectTargetSsid: ""
++    property string _hiddenNetworkSecret: ""
+
+     readonly property var _nativeDevices: Networking.devices ? Networking.devices.values : []
+     readonly property var _nativeWifiDevices: _nativeDevices.filter(device => device && device.type === DeviceType.Wifi)
+@@ -241,6 +243,7 @@ Singleton {
+         root._pendingWithPsk = false;
+         root._pendingStateWasChanging = false;
+         root.connectTargetSsid = "";
++        root._hiddenNetworkSecret = "";
+     }
+
+     function _isPskSecurity(securityType) {
+@@ -462,11 +465,39 @@ Singleton {
+         return root.savedWifiConnections.find(connection => connection.ssid === ssid) || null;
+     }
+
+-    // TODO(Extras phase 2): the installed Quickshell API does not expose hidden
+-    // SSID creation, so this must remain an explicit unsupported operation.
+     function connectHiddenNetwork(ssid, credentials) {
+-        root.lastError = qsTr("当前 Quickshell API 不支持创建隐藏网络连接");
+-        root.operationFailed("connect-hidden", root.lastError);
++        const networkSsid = String(ssid || "");
++        const secure = !credentials || credentials.secure !== false;
++        const password = secure && credentials && credentials.password
++            ? String(credentials.password) : "";
++
++        if (!root.available || !root.wifiAvailable || !root.wifiEnabled) {
++            root.lastError = qsTr("Wi-Fi 当前不可用");
++            root.operationFailed("connect-hidden", root.lastError);
++            return;
++        }
++        if (networkSsid.trim().length === 0) {
++            root.lastError = qsTr("请输入隐藏网络名称");
++            root.operationFailed("connect-hidden", root.lastError);
++            return;
++        }
++        if (secure && password.length === 0) {
++            root.lastError = qsTr("请输入隐藏网络密码");
++            root.operationFailed("connect-hidden", root.lastError);
++            return;
++        }
++        if (!root._beginOperation("connect-hidden", null, networkSsid))
++            return;
++
++        root.connectTargetSsid = networkSsid;
++        root._pendingWithPsk = secure;
++        root._hiddenNetworkSecret = password;
++        hiddenWifiProcess.command = [
++            "clavis-hidden-wifi",
++            secure ? "secure" : "open",
++            networkSsid
++        ];
++        hiddenWifiProcess.running = true;
+     }
+
+     function recheckConnectivity() {
+@@ -543,6 +574,37 @@ Singleton {
+         }
+     }
+
++    Process {
++        id: hiddenWifiProcess
++
++        stdinEnabled: true
++        stdout: StdioCollector {}
++        stderr: StdioCollector {
++            id: hiddenWifiStderr
++        }
++
++        onStarted: {
++            const secret = root._hiddenNetworkSecret;
++            root._hiddenNetworkSecret = "";
++            if (secret.length > 0)
++                hiddenWifiProcess.write(secret + "\n");
++        }
++
++        onExited: exitCode => {
++            root._hiddenNetworkSecret = "";
++            if (root._pendingOperation !== "connect-hidden")
++                return;
++            if (exitCode === 0) {
++                root._finishOperationSucceeded();
++                return;
++            }
++
++            const details = hiddenWifiStderr.text.trim();
++            root._finishOperationFailed(details.length > 0
++                ? details : qsTr("隐藏网络连接失败"));
++        }
++    }
++
+     Timer {
+         id: manualScanReleaseTimer
+         interval: 15000

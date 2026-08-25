@@ -1,9 +1,19 @@
-# Ignore build outputs from performing a nix-build or `nix build` command
 result
 result-*
-
-# Ignore automatically generated direnv output
-.direnv
-
-# Ignore NixOS interactive test driver history
+.direnv/
 **/.nixos-test-history
+.envrc
+.env
+.env.*
+!.env.example
+secrets/
+private/
+*.key
+*.pem
+id_rsa
+id_ed25519
+*.bak
+*.hm-backup
+*.swp
+*.swo
+*~

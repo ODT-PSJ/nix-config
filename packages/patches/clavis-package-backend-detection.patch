@@ -1,0 +1,63 @@
+diff --git a/Services/PackageService.qml b/Services/PackageService.qml
+index 956b31e..08baee8 100644
+--- a/Services/PackageService.qml
++++ b/Services/PackageService.qml
+@@ -9,6 +9,7 @@ Singleton {
+
+     readonly property string commandName:
+         Quickshell.env("CLAVIS_PARU") || "paru"
++    property bool supported: false
+     property int totalPackages: -1
+     property int pendingUpdates: -1
+     property bool totalLoading: false
+@@ -17,6 +18,9 @@ Singleton {
+     property int _updateCount: 0
+
+     function refresh() {
++        if (!root.supported)
++            return;
++
+         if (!totalProcess.running) {
+             root._totalCount = 0;
+             root.totalLoading = true;
+@@ -29,7 +33,18 @@ Singleton {
+         }
+     }
+
+-    Component.onCompleted: refresh()
++    Process {
++        id: backendProbe
++
++        command: ["which", root.commandName]
++        running: true
++
++        onExited: exitCode => {
++            root.supported = exitCode === 0;
++            if (root.supported)
++                root.refresh();
++        }
++    }
+
+     Process {
+         id: totalProcess
+@@ -72,7 +87,7 @@ Singleton {
+     Timer {
+         interval: 30 * 60 * 1000
+         repeat: true
+-        running: true
++        running: root.supported
+         onTriggered: root.refresh()
+     }
+ }
+diff --git a/Modules/ControlCenter/AccountPage.qml b/Modules/ControlCenter/AccountPage.qml
+index 3296170..1ec0424 100644
+--- a/Modules/ControlCenter/AccountPage.qml
++++ b/Modules/ControlCenter/AccountPage.qml
+@@ -152,6 +152,7 @@ Item {
+                 distroId: SystemIdentityService.distroId
+                 distroName: SystemIdentityService.distroName
+                 uptimeText: SystemIdentityService.uptimeText
++                showPackageStats: PackageService.supported
+                 totalPackageCount: PackageService.totalPackages
+                 pendingUpdateCount: PackageService.pendingUpdates
+                 onAvatarActivated: avatarPicker.openAt(avatarPicker.picturesDir)

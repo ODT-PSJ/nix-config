@@ -1,0 +1,50 @@
+diff --git a/Common/Sizes.qml b/Common/Sizes.qml
+--- a/Common/Sizes.qml
++++ b/Common/Sizes.qml
+@@ -24,7 +24,7 @@ Singleton {
+     readonly property real typeLabelSmall: 11
+
+     readonly property real cornerRadius: 10
+-    readonly property real barHeight: 44
++    readonly property real barHeight: 38
+     readonly property real sidebarScrollableListMaxHeight: 224
+
+     readonly property real lockReferenceScale: 4 / 3
+diff --git a/Modules/Bar/Bar.qml b/Modules/Bar/Bar.qml
+--- a/Modules/Bar/Bar.qml
++++ b/Modules/Bar/Bar.qml
+@@ -49,10 +49,10 @@ Variants {
+             // --- 左侧组件 ---
+             RowLayout {
+                 id: leftSection
+-                anchors { left: parent.left; leftMargin: 10; bottom: parent.bottom }
++                anchors { left: parent.left; leftMargin: 8; bottom: parent.bottom }
+                 width: implicitWidth
+                 height: implicitHeight
+-                spacing: 8
++                spacing: 6
+
+                 Workspaces {
+                     id: workspaces
+@@ -70,10 +70,10 @@ Variants {
+             // --- 右侧组件 ---
+             RowLayout {
+                 id: rightSection
+-                anchors { right: parent.right; rightMargin: 10; bottom: parent.bottom }
++                anchors { right: parent.right; rightMargin: 8; bottom: parent.bottom }
+                 width: implicitWidth
+                 height: implicitHeight
+-                spacing: 8
++                spacing: 6
+
+                 Tray {
+                     id: tray
+@@ -120,7 +120,7 @@ Variants {
+                 sysMonitor,
+                 quickSettings
+             ]
+-            radius: 18
++            radius: 16
+         }
+     }
+ }

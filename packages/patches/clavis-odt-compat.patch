@@ -1,0 +1,71 @@
+diff --git a/Modules/ControlCenter/AccountPage.qml b/Modules/ControlCenter/AccountPage.qml
+index e75847e..080cc9a 100644
+--- a/Modules/ControlCenter/AccountPage.qml
++++ b/Modules/ControlCenter/AccountPage.qml
+@@ -146,7 +146,7 @@ Item {
+                 wallpaperPath: WallpaperService.currentWallpaper
+                 colorWallpaper: WallpaperService.isColorSource(wallpaperPath)
+                 avatarUrl: AvatarService.avatarUrl
+-                fallbackAvatarUrl: Paths.fileUrl(Paths.defaultAvatar)
++                fallbackAvatarUrl: ""
+                 accountIdentity: SystemIdentityService.accountIdentity
+                 distroId: SystemIdentityService.distroId
+                 distroName: SystemIdentityService.distroName
+diff --git a/Modules/Keystone/DashboardContent/UserCard.qml b/Modules/Keystone/DashboardContent/UserCard.qml
+index e4dbb3f..16cac33 100644
+--- a/Modules/Keystone/DashboardContent/UserCard.qml
++++ b/Modules/Keystone/DashboardContent/UserCard.qml
+@@ -83,7 +83,7 @@ Rectangle {
+                 id: fallbackAvatar
+
+                 anchors.fill: parent
+-                source: Paths.fileUrl(Paths.defaultAvatar)
++                source: ""
+                 sourceSize: Qt.size(252, 252)
+                 fillMode: Image.PreserveAspectCrop
+                 asynchronous: true
+diff --git a/Modules/Lock/LockContent.qml b/Modules/Lock/LockContent.qml
+index c3f9a95..6c13632 100644
+--- a/Modules/Lock/LockContent.qml
++++ b/Modules/Lock/LockContent.qml
+@@ -129,6 +129,6 @@ Item {
+                     id: fallbackAvatarImg
+                     anchors.fill: parent
+-                    source: Paths.fileUrl(Paths.defaultAvatar)
++                    source: ""
+                     sourceSize: Qt.size(width, height)
+                     fillMode: Image.PreserveAspectCrop
+                     asynchronous: true
+diff --git a/Modules/Sidebars/Left/ProfileHeaderCard.qml b/Modules/Sidebars/Left/ProfileHeaderCard.qml
+index 651047d..cd92015 100644
+--- a/Modules/Sidebars/Left/ProfileHeaderCard.qml
++++ b/Modules/Sidebars/Left/ProfileHeaderCard.qml
+@@ -21,7 +21,7 @@ AccountProfileHeader {
+     wallpaperPath: resolvedWallpaperPath
+     colorWallpaper: WallpaperService.isColorSource(resolvedWallpaperPath)
+     avatarUrl: AvatarService.avatarUrl
+-    fallbackAvatarUrl: Paths.fileUrl(Paths.defaultAvatar)
++    fallbackAvatarUrl: ""
+     accountIdentity: SystemIdentityService.accountIdentity
+     distroId: SystemIdentityService.distroId
+     distroName: SystemIdentityService.distroName
+diff --git a/Modules/Keystone/WeatherContent/WeatherContent.qml b/Modules/Keystone/WeatherContent/WeatherContent.qml
+index 2d1c4af..14d6c41 100644
+--- a/Modules/Keystone/WeatherContent/WeatherContent.qml
++++ b/Modules/Keystone/WeatherContent/WeatherContent.qml
+@@ -178,7 +178,6 @@ Item {
+             root.windSpeed = "--"
+             root.pressure = "--"
+             root.hourlyData = []
+             root.dailyData = []
+-            hourlyCanvas.requestPaint()
+             return
+         }
+@@ -229,7 +228,6 @@ Item {
+         }
+         root.dailyData = nextDaily
+
+-        hourlyCanvas.requestPaint()
+     }
+
+     Component.onCompleted: {

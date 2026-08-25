@@ -1,0 +1,130 @@
+diff --git a/Modules/ControlCenter/ControlCenterWindow.qml b/Modules/ControlCenter/ControlCenterWindow.qml
+index 76867bd..e8e9c0a 100644
+--- a/Modules/ControlCenter/ControlCenterWindow.qml
++++ b/Modules/ControlCenter/ControlCenterWindow.qml
+@@ -21,7 +21,10 @@ FloatingWindow {
+     Material.theme: PersonalizationConfig.themeMode === "light" ? Material.Light : Material.Dark
+     Material.accent: Appearance.colors.colPrimary
+     onClosed: Qt.quit()
+-    Component.onCompleted: I18nService.initialize()
++    Component.onCompleted: {
++        I18nService.initialize();
++        root.openPage(Quickshell.env("CLAVIS_CONTROL_CENTER_PAGE"));
++    }
+
+     property real contentPadding: 8
+     property int currentPage: 0
+diff --git a/Modules/Sidebars/Left/DailyForecastTrendCard.qml b/Modules/Sidebars/Left/DailyForecastTrendCard.qml
+index 9403b85..cb9c69c 100644
+--- a/Modules/Sidebars/Left/DailyForecastTrendCard.qml
++++ b/Modules/Sidebars/Left/DailyForecastTrendCard.qml
+@@ -136,6 +136,7 @@ Rectangle {
+                 Item { Layout.fillWidth: true }
+
+                 Rectangle {
++                    visible: false
+                     Layout.preferredWidth: 36
+                     Layout.preferredHeight: 36
+                     Layout.alignment: Qt.AlignVCenter
+@@ -153,6 +154,5 @@ Rectangle {
+                         anchors.fill: parent
+                         hoverEnabled: true
+-                        onClicked: console.log("Open weather forecast menu")
+                     }
+                 }
+             }
+diff --git a/Modules/Sidebars/Left/HourlyForecastTrendCard.qml b/Modules/Sidebars/Left/HourlyForecastTrendCard.qml
+index 0167b42..cd078d2 100644
+--- a/Modules/Sidebars/Left/HourlyForecastTrendCard.qml
++++ b/Modules/Sidebars/Left/HourlyForecastTrendCard.qml
+@@ -98,6 +98,7 @@ Rectangle {
+                 Item { Layout.fillWidth: true }
+
+                 Rectangle {
++                    visible: false
+                     Layout.preferredWidth: 36
+                     Layout.preferredHeight: 36
+                     Layout.alignment: Qt.AlignVCenter
+@@ -115,6 +116,5 @@ Rectangle {
+                         anchors.fill: parent
+                         hoverEnabled: true
+-                        onClicked: console.log("Open hourly weather menu")
+                     }
+                 }
+             }
+diff --git a/Modules/Sidebars/Left/WeatherView.qml b/Modules/Sidebars/Left/WeatherView.qml
+index 0a93cb1..362ad93 100644
+--- a/Modules/Sidebars/Left/WeatherView.qml
++++ b/Modules/Sidebars/Left/WeatherView.qml
+@@ -2,6 +2,7 @@ import QtQuick
+ import QtQuick.Layouts
+ import QtQuick.Controls
+ import Qt5Compat.GraphicalEffects
++import Quickshell
+ import qs.Common
+ import qs.Widgets.common
+ import qs.Widgets.weather
+@@ -19,6 +20,16 @@ Item {
+     property color headerErrorInk: lightHeaderPalette ? Qt.rgba(1.0, 0.79, 0.82, 0.96) : Qt.rgba(0.62, 0.14, 0.18, 0.88)
+     property real currentEpoch: Math.floor(Date.now() / 1000)
+
++    function openWeatherSettings() {
++        WidgetState.leftSidebarOpen = false;
++        Quickshell.execDetached([
++            "env",
++            "CLAVIS_CONTROL_CENTER_PAGE=weather",
++            "qs", "--path",
++            Paths.shellDir + "/controlcenter.qml"
++        ]);
++    }
++
+     function validNumber(value) {
+         return value !== undefined && value !== null && !isNaN(value)
+     }
+@@ -336,7 +347,7 @@ Item {
+                         implicitWidth: 38
+                         implicitHeight: 38
+                         Layout.alignment: Qt.AlignVCenter
+-                        onClicked: console.log("Open weather settings")
++                        onClicked: root.openWeatherSettings()
+
+                         background: Rectangle {
+                             radius: width / 2
+diff --git a/Modules/Sidebars/Left/WeatherViewPreview.qml b/Modules/Sidebars/Left/WeatherViewPreview.qml
+index e5a5e32..fb73d47 100644
+--- a/Modules/Sidebars/Left/WeatherViewPreview.qml
++++ b/Modules/Sidebars/Left/WeatherViewPreview.qml
+@@ -2,6 +2,7 @@ import QtQuick
+ import QtQuick.Layouts
+ import QtQuick.Controls
+ import Qt5Compat.GraphicalEffects
++import Quickshell
+ import qs.Common
+ import qs.Widgets.common
+ import qs.Widgets.weather
+@@ -10,6 +11,16 @@ Item {
+     id: root
+
+
++    function openWeatherSettings() {
++        WidgetState.leftSidebarOpen = false;
++        Quickshell.execDetached([
++            "env",
++            "CLAVIS_CONTROL_CENTER_PAGE=weather",
++            "qs", "--path",
++            Paths.shellDir + "/controlcenter.qml"
++        ]);
++    }
++
+     property int contentMargin: 16
+     property int headerHeight: 62
+
+@@ -172,7 +183,7 @@ Item {
+                         implicitWidth: 38
+                         implicitHeight: 38
+                         Layout.alignment: Qt.AlignVCenter
+-                        onClicked: console.log("Open weather settings")
++                        onClicked: root.openWeatherSettings()
+
+                         background: Rectangle {
+                             radius: width / 2

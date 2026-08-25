@@ -1,0 +1,196 @@
+diff --git a/AppShell.qml b/AppShell.qml
+index 24ded6b..f99b8b0 100644
+--- a/AppShell.qml
++++ b/AppShell.qml
+@@ -2,6 +2,7 @@ import QtQuick
+ import Quickshell
+ import Quickshell.Io
+ import Clavis.WeatherMap 1.0
++import qs.Common
+ import qs.Modules.Bar
+ import qs.Modules.Keystone
+ import qs.Modules.Launcher
+@@ -71,31 +72,43 @@ Item {
+     IpcHandler {
+         target: "wallpaper"
+
+-        function set(path, screenName) {
++        function set(path: string, screenName: string): string {
+             return WallpaperService.setWallpaper(path || "", screenName || "", true) ? "OK" : "PENDING";
+         }
+
+-        function clear(screenName) {
++        function clear(screenName: string): string {
+             return WallpaperService.clearWallpaper(screenName || "", true) ? "OK" : "PENDING";
+         }
+
+-        function previous() {
++        function previous(): string {
+             return WallpaperService.cyclePrevious(true) ? "OK" : "PENDING";
+         }
+
+-        function next() {
++        function next(): string {
+             return WallpaperService.cycleNext(true) ? "OK" : "PENDING";
+         }
+
+-        function random() {
++        function random(): string {
+             return WallpaperService.cycleRandom(true) ? "OK" : "PENDING";
+         }
+
+-        function setFolder(path) {
++        function setFolder(path: string): string {
+             return WallpaperService.setWallpaperFolder(path || "", true) ? "OK" : "PENDING";
+         }
+     }
+
++    IpcHandler {
++        target: "quick-settings"
++
++        function open(view: string): string {
++            const supportedViews = ["settings", "network", "bluetooth", "idle", "audio", "microphone"];
++            const safeView = supportedViews.indexOf(view) >= 0 ? view : "settings";
++            WidgetState.qsView = safeView;
++            WidgetState.qsOpen = true;
++            return "OPENED_" + safeView.toUpperCase();
++        }
++    }
++
+     IpcHandler {
+         target: "weather-map"
+
+diff --git a/Modules/ControlCenter/AccountPage.qml b/Modules/ControlCenter/AccountPage.qml
+index af695bb..3296170 100644
+--- a/Modules/ControlCenter/AccountPage.qml
++++ b/Modules/ControlCenter/AccountPage.qml
+@@ -6,6 +6,7 @@ import QtQuick.Controls
+ import QtQuick.Controls.Material
+ import QtQuick.Layouts
+ import QtQuick.Window
++import Quickshell
+ import qs.Common
+ import qs.Components
+ import qs.Modules.FilePicker
+@@ -326,7 +327,12 @@ Item {
+                         Layout.fillWidth: true
+                         text: qsTr("更多蓝牙设置")
+                         trailingIconName: "chevron_right"
+-                        onClicked: console.log("TODO: open detailed Bluetooth settings")
++                        onClicked: Quickshell.execDetached([
++                            "qs",
++                            "--path", Paths.shellDir,
++                            "ipc", "call",
++                            "quick-settings", "open", "bluetooth"
++                        ])
+                     }
+                 }
+
+@@ -450,7 +456,10 @@ Item {
+                             text: qsTr("管理云存储")
+                             iconName: "settings"
+                             trailingIconName: "chevron_right"
+-                            onClicked: console.log("TODO: open cloud storage management")
++                            onClicked: Quickshell.execDetached([
++                                "alacritty", "--title", qsTr("云存储配置"), "-e",
++                                "rclone", "config"
++                            ])
+                         }
+                     }
+                 }
+diff --git a/Modules/Keystone/Tools/ToolsBackend.qml b/Modules/Keystone/Tools/ToolsBackend.qml
+index 6af3571..d314899 100644
+--- a/Modules/Keystone/Tools/ToolsBackend.qml
++++ b/Modules/Keystone/Tools/ToolsBackend.qml
+@@ -9,6 +9,9 @@ Item {
+     function pickColor() { colorPickerProcess.running = false; colorPickerProcess.running = true }
+     function takeScreenshot() {
+         return RegionSelectionService.begin("screenshot", {})
++    }
++    function recognizeText() {
++        return RegionSelectionService.begin("ocr", {})
+     }
+
+     function startRecord(mode) {
+@@ -34,21 +37,41 @@ Item {
+         target: RegionSelectionService
+
+         function onSelectionAccepted(action, geometry, options) {
+-            if (action !== "screenshot")
+-                return
+-
+-            screenshotProcess.command = [
+-                "bash",
+-                "-c",
+-                "grim -g \"$1\" - | wl-copy",
+-                "clavis-screenshot",
+-                geometry
+-            ]
+-            screenshotProcess.running = true
++            if (action === "screenshot") {
++                screenshotProcess.command = ["clavis-screenshot", geometry]
++                screenshotProcess.running = true
++                return
++            }
++
++            if (action === "ocr") {
++                ocrProcess.running = false
++                ocrProcess.command = ["clavis-ocr", geometry]
++                ocrProcess.running = true
++            }
+         }
+     }
+
+     // 简单工具依然保持内联
+-    Process { id: colorPickerProcess; command: ["bash", "-c", "nohup bash -c 'sleep 0.3; hyprpicker -a' >/dev/null 2>&1 &"] }
++    Process {
++        id: colorPickerProcess
++        command: ["bash", "-c", "sleep 0.3; exec hyprpicker -a -n -f hex"]
++        stderr: StdioCollector {
++            onStreamFinished: if (this.text.trim())
++                console.warn("取色器:", this.text.trim())
++        }
++    }
+-    Process { id: screenshotProcess }
++    Process {
++        id: screenshotProcess
++        stderr: StdioCollector {
++            onStreamFinished: if (this.text.trim())
++                console.warn("截图:", this.text.trim())
++        }
++    }
++    Process {
++        id: ocrProcess
++        stderr: StdioCollector {
++            onStreamFinished: if (this.text.trim())
++                console.warn("OCR:", this.text.trim())
++        }
++    }
+ }
+diff --git a/Modules/Keystone/Tools/ToolsContent.qml b/Modules/Keystone/Tools/ToolsContent.qml
+index 615fba5..9b30a80 100644
+--- a/Modules/Keystone/Tools/ToolsContent.qml
++++ b/Modules/Keystone/Tools/ToolsContent.qml
+@@ -17,7 +17,6 @@ Item {
+         { icon: "videocam",         tip: qsTr("录屏") },
+         { icon: "gif",              tip: qsTr("录制 GIF") },
+         { icon: "crop_free",        tip: qsTr("普通截屏") },
+-        { icon: "height",           tip: qsTr("截长屏") },
+         { icon: "document_scanner", tip: qsTr("OCR 识别") },
+         { icon: "mic",              tip: qsTr("录麦克风") },
+         { icon: "speaker",          tip: qsTr("录电脑声音") }
+@@ -59,10 +58,10 @@ Item {
+         } else if (selectedIndex === 3) {
+             toolsBackend.takeScreenshot()
+-        } else if (selectedIndex === 6) {
++        } else if (selectedIndex === 4) {
++            toolsBackend.recognizeText()
++        } else if (selectedIndex === 5) {
+             toolsBackend.startAudio("mic")
+-        } else if (selectedIndex === 7) {
++        } else if (selectedIndex === 6) {
+             toolsBackend.startAudio("system")
+-        } else {
+-            console.log(qsTr("该工具的后端尚未实现！"))
+         }
+     }
