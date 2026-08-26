@@ -1,8 +1,10 @@
 { inputs, pkgs, ... }:
+let
+  niriPackages = inputs.niri.packages.${pkgs.stdenv.hostPlatform.system};
+in
 {
-  nixpkgs.overlays = [ inputs.niri.overlays.niri ];
   programs.niri.enable = true;
-  programs.niri.package = pkgs.niri-unstable;
+  programs.niri.package = niriPackages.niri-unstable;
 
   services.greetd = {
     enable = true;
@@ -38,7 +40,7 @@
     loupe celluloid papers file-roller
     yazi go-musicfox
     kooha wechat protonmail-desktop zed-editor
-    xwayland-satellite-unstable
+    niriPackages.xwayland-satellite-unstable
   ];
 
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
