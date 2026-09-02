@@ -1,6 +1,7 @@
 { config, lib, pkgs, username, ... }:
 
 let
+  comfyui = pkgs.callPackage ../../packages/comfyui.nix { };
   clavisLauncher = pkgs.writeShellApplication {
     name = "clavis-launcher";
     runtimeInputs = with pkgs; [ quickshell systemd ];
@@ -11,6 +12,31 @@ let
         exit 1
       fi
       exec qs ipc --pid "$clavisPid" call launcher toggle
+    '';
+  };
+  clipboardHistory = pkgs.writeShellApplication {
+    name = "clipboard-history";
+    runtimeInputs = with pkgs; [ cliphist fuzzel libnotify wl-clipboard ];
+    text = ''
+      if [[ "''${1:-}" == "clear" ]]; then
+        confirmation="$(
+          printf '%s\n' "确认清空全部历史" \
+            | fuzzel --dmenu --only-match --prompt="剪贴板 > " --lines=1
+        )"
+        if [[ "$confirmation" == "确认清空全部历史" ]]; then
+          cliphist wipe
+          notify-send "剪贴板历史" "历史记录已清空"
+        fi
+        exit 0
+      fi
+
+      selection="$(
+        cliphist list \
+          | fuzzel --dmenu --only-match --no-run-if-empty \
+              --prompt="剪贴板 > " --placeholder="搜索历史记录" \
+              --with-nth=2 --match-nth=2
+      )"
+      printf '%s\n' "$selection" | cliphist decode | wl-copy
     '';
   };
   wechatLauncher = pkgs.writeShellApplication {
@@ -137,6 +163,17 @@ in
 
       services.blueman-applet.enable = true;
 
+      services.cliphist = {
+        enable = true;
+        allowImages = true;
+        extraOptions = [
+          "-max-dedupe-search" "100"
+          "-max-items" "500"
+          "-min-store-length" "1"
+        ];
+        systemdTargets = [ "graphical-session.target" ];
+      };
+
       services.udiskie = {
         enable = true;
         automount = true;
@@ -166,12 +203,35 @@ in
         };
         packages = [
           clavisLauncher
+          clipboardHistory
+          pkgs.discord
           nixosCheck
           nixosBuild
           nixosSwitch
           nixosRollback
+          pkgs.nodejs_22
           wechatLauncher
+          pkgs.wmctrl
+          comfyui.setup
+          comfyui.launch
         ];
+      };
+
+      systemd.user.services.comfyui = {
+        Unit = {
+          Description = "ComfyUI image generation server";
+          Documentation = "https://github.com/Comfy-Org/ComfyUI";
+          ConditionPathExists = "%h/AI/ComfyUI/.venv/bin/python";
+          After = [ "graphical-session.target" ];
+        };
+        Service = {
+          ExecStart = "${comfyui.launch}/bin/comfyui-launch";
+          WorkingDirectory = "%h/AI/ComfyUI";
+          Restart = "on-failure";
+          RestartSec = 5;
+          Environment = [ "PYTHONUNBUFFERED=1" ];
+        };
+        Install.WantedBy = [ "graphical-session.target" ];
       };
 
       xdg = {
@@ -317,6 +377,41 @@ in
       programs = {
         home-manager.enable = true;
 
+        fuzzel = {
+          enable = true;
+          settings = {
+            main = {
+              font = "LXGW WenKai GB Screen:size=12";
+              width = 72;
+              lines = 12;
+              tabs = 4;
+              horizontal-pad = 18;
+              vertical-pad = 10;
+              inner-pad = 8;
+              line-height = 24;
+              layer = "overlay";
+              match-mode = "fzf";
+            };
+            border = {
+              width = 1;
+              radius = 8;
+            };
+            colors = {
+              background = "171c1ff2";
+              text = "dce4e8ff";
+              prompt = "8fc9ddff";
+              placeholder = "899296ff";
+              input = "f0f4f6ff";
+              match = "80d5cfff";
+              selection = "354a53ff";
+              selection-text = "f0f4f6ff";
+              selection-match = "9cf1ebff";
+              counter = "899296ff";
+              border = "59676cff";
+            };
+          };
+        };
+
         bash = {
           enable = true;
           enableCompletion = true;
@@ -399,7 +494,7 @@ in
           settings = {
             logo = {
               type = "builtin";
-              source = "nixos_small";
+              source = "nixos";
               padding = { right = 3; };
               color = {
                 "1" = "cyan";
@@ -425,11 +520,14 @@ in
               { type = "uptime"; key = "󰅐 运行"; }
               { type = "packages"; key = "󰏖 软件包"; }
               { type = "wm"; key = " 窗管"; }
+              { type = "display"; key = "󰍹 显示"; }
+              { type = "shell"; key = "󰆍 Shell"; }
               { type = "terminal"; key = " 终端"; }
               { type = "cpu"; key = " 处理器"; }
               { type = "gpu"; key = "󰢮 显卡"; }
               { type = "memory"; key = " 内存"; }
               { type = "disk"; key = "󰋊 磁盘"; }
+              { type = "battery"; key = "󰁹 电池"; }
               "break"
               "colors"
             ];

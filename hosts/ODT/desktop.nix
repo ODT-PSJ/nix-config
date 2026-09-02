@@ -15,6 +15,7 @@ in
   };
 
   programs.firefox.enable = true;
+  programs.steam.enable = true;
   programs.thunar = {
     enable = true;
     plugins = [ pkgs.thunar-archive-plugin ];

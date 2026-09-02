@@ -1,0 +1,57 @@
+diff --git a/Modules/Launcher/AppPage.qml b/Modules/Launcher/AppPage.qml
+index b5093d2..4735495 100644
+--- a/Modules/Launcher/AppPage.qml
++++ b/Modules/Launcher/AppPage.qml
+@@ -193,8 +193,23 @@ Item {
+         if (filteredAppsModel.length > 0 && appsList.currentIndex >= 0) {
+             let appData = filteredAppsModel[appsList.currentIndex]
+             if (appData && appData.appObj)
+-                appData.appObj.execute()
++                executeApp(appData.appObj)
+             root.requestCloseLauncher()
+         }
+     }
++
++    function executeApp(app) {
++        if (app.runInTerminal || !app.command || app.command.length === 0) {
++            app.execute()
++            return
++        }
++
++        const command = ["systemd-run", "--user", "--scope", "--collect", "--quiet"]
++        if (app.workingDirectory)
++            command.push("--working-directory=" + String(app.workingDirectory))
++        command.push("--")
++        for (let argument of app.command)
++            command.push(String(argument))
++        Quickshell.execDetached(command)
++    }
+ }
+diff --git a/Modules/Launcher/WindowPage.qml b/Modules/Launcher/WindowPage.qml
+index da52f0a..b0c6868 100644
+--- a/Modules/Launcher/WindowPage.qml
++++ b/Modules/Launcher/WindowPage.qml
+@@ -72,6 +72,10 @@ Item {
+             if (root.visible)
+                 root.search(root.query)
+         }
++        function onWindowMetadataChanged() {
++            if (root.visible)
++                root.search(root.query)
++        }
+     }
+ 
+     onQueryChanged: search(query)
+diff --git a/Widgets/common/AccountProfileHeader.qml b/Widgets/common/AccountProfileHeader.qml
+index e75391a..ad6f8cb 100644
+--- a/Widgets/common/AccountProfileHeader.qml
++++ b/Widgets/common/AccountProfileHeader.qml
+@@ -271,7 +271,7 @@ Rectangle {
+                 }
+ 
+                 Text {
+-                    Layout.maximumWidth: parent.width * 0.44
++                    Layout.maximumWidth: Math.max(0, root.width * 0.44)
+                     text: root.distroName
+                     color: Appearance.colors.colOnSurfaceVariant
+                     font.family: Sizes.fontFamily

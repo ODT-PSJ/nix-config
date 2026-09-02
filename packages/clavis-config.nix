@@ -28,6 +28,8 @@ pkgs.stdenvNoCC.mkDerivation {
     ./patches/clavis-compact-bar.patch
     ./patches/clavis-bluetooth-pairing.patch
     ./patches/clavis-fcitx-tray-icon.patch
+    ./patches/clavis-runtime-stability.patch
+    ./patches/clavis-lottie-lifecycle.patch
   ];
 
   nativeBuildInputs = [ pkgs.gnutar ];

@@ -7,6 +7,10 @@ pkgs.stdenv.mkDerivation {
 
   sourceRoot = "source/core";
 
+  patches = [
+    ./patches/clavis-niri-metadata-updates.patch
+  ];
+
   nativeBuildInputs = with pkgs; [
     cmake
     ninja

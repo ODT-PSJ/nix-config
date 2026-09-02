@@ -89,6 +89,7 @@ binds {
 
     Mod+T hotkey-overlay-title="打开终端" { spawn "kitty"; }
     Mod+D repeat=false hotkey-overlay-title="打开启动器" { spawn "clavis-launcher"; }
+    Mod+Ctrl+V repeat=false hotkey-overlay-title="剪贴板历史" { spawn "clipboard-history"; }
     Mod+Alt+K repeat=false hotkey-overlay-title="切换灵动岛工具" { spawn "clavis-tools"; }
     Super+Alt+L hotkey-overlay-title="锁定屏幕" { spawn "swaylock"; }
     Super+Alt+S allow-when-locked=true hotkey-overlay-title=null { spawn-sh "pkill orca || exec orca"; }

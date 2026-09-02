@@ -1,0 +1,167 @@
+diff --git a/plugin/niri/src/niri_plugin.cpp b/plugin/niri/src/niri_plugin.cpp
+index 5e9d346..4e2397e 100644
+--- a/plugin/niri/src/niri_plugin.cpp
++++ b/plugin/niri/src/niri_plugin.cpp
+@@ -7,6 +7,23 @@
+ #include <QTimer>
+ #include <algorithm>
+ 
++namespace {
++bool hasSameWindowStructure(const NiriWindow &left, const NiriWindow &right)
++{
++    return left.id == right.id
++        && left.appId == right.appId
++        && left.appName == right.appName
++        && left.pid == right.pid
++        && left.workspaceId == right.workspaceId
++        && left.isFocused == right.isFocused
++        && left.isFloating == right.isFloating
++        && left.isUrgent == right.isUrgent
++        && left.layoutColumn == right.layoutColumn
++        && left.layoutRow == right.layoutRow
++        && left.iconPath == right.iconPath;
++}
++}
++
+ NiriPlugin::NiriPlugin(QObject *parent)
+     : QObject(parent)
+ {
+@@ -289,10 +306,23 @@ void NiriPlugin::handleEvent(const QJsonObject &event)
+         auto it = std::find_if(m_windows.begin(), m_windows.end(), [window](const NiriWindow &candidate) {
+             return candidate.id == window.id;
+         });
+-        if (it == m_windows.end())
++        if (it == m_windows.end()) {
+             m_windows.append(window);
+-        else
++        } else if (hasSameWindowStructure(*it, window)) {
++            if (it->title == window.title)
++                return;
++
++            *it = window;
++            m_windowModel.updateWindow(window);
++            emit windowMetadataChanged();
++            if (window.isFocused) {
++                m_focusedWindow = windowToMap(window);
++                emit focusedWindowChanged();
++            }
++            return;
++        } else {
+             *it = window;
++        }
+         windowChanged = true;
+     } else if (type == QStringLiteral("WindowClosed")) {
+         const quint64 id = event.value(type).toObject().value(QStringLiteral("id")).toInteger();
+diff --git a/plugin/niri/src/niri_plugin.h b/plugin/niri/src/niri_plugin.h
+index 0ae6059..a19e161 100644
+--- a/plugin/niri/src/niri_plugin.h
++++ b/plugin/niri/src/niri_plugin.h
+@@ -90,6 +90,7 @@ signals:
+     void errorChanged();
+     void workspacesChanged();
+     void windowsChanged();
++    void windowMetadataChanged();
+     void outputsChanged();
+     void focusedWindowChanged();
+     void focusedWorkspaceChanged();
+diff --git a/src/niri_window_model.cpp b/src/niri_window_model.cpp
+index d4e0cb7..ab91331 100644
+--- a/src/niri_window_model.cpp
++++ b/src/niri_window_model.cpp
+@@ -76,6 +76,40 @@ void NiriWindowModel::setWindows(const QList<NiriWindow> &windows)
+         emit countChanged();
+ }
+ 
++bool NiriWindowModel::updateWindow(const NiriWindow &window)
++{
++    for (int row = 0; row < m_windows.count(); ++row) {
++        NiriWindow &current = m_windows[row];
++        if (current.id != window.id)
++            continue;
++
++        QList<int> changedRoles;
++        const auto changed = [&changedRoles](bool value, Role role) {
++            if (value)
++                changedRoles.append(role);
++        };
++        changed(current.title != window.title, TitleRole);
++        changed(current.appId != window.appId, AppIdRole);
++        changed(current.appName != window.appName, AppNameRole);
++        changed(current.pid != window.pid, PidRole);
++        changed(current.workspaceId != window.workspaceId, WorkspaceIdRole);
++        changed(current.isFocused != window.isFocused, IsFocusedRole);
++        changed(current.isFloating != window.isFloating, IsFloatingRole);
++        changed(current.isUrgent != window.isUrgent, IsUrgentRole);
++        changed(current.layoutColumn != window.layoutColumn, LayoutColumnRole);
++        changed(current.layoutRow != window.layoutRow, LayoutRowRole);
++        changed(current.iconPath != window.iconPath, IconPathRole);
++        if (changedRoles.isEmpty())
++            return false;
++
++        current = window;
++        const QModelIndex changedIndex = index(row);
++        emit dataChanged(changedIndex, changedIndex, changedRoles);
++        return true;
++    }
++    return false;
++}
++
+ const QList<NiriWindow> &NiriWindowModel::windows() const
+ {
+     return m_windows;
+diff --git a/src/niri_window_model.h b/src/niri_window_model.h
+index 2bc7601..83daf8e 100644
+--- a/src/niri_window_model.h
++++ b/src/niri_window_model.h
+@@ -31,6 +31,7 @@ public:
+     QHash<int, QByteArray> roleNames() const override;
+ 
+     void setWindows(const QList<NiriWindow> &windows);
++    bool updateWindow(const NiriWindow &window);
+     const QList<NiriWindow> &windows() const;
+     QVariantMap windowById(quint64 id) const;
+     QVariantList windowsForWorkspace(quint64 workspaceId) const;
+diff --git a/tests/niri_workspace_deriver_test.cpp b/tests/niri_workspace_deriver_test.cpp
+index 288d553..8798f63 100644
+--- a/tests/niri_workspace_deriver_test.cpp
++++ b/tests/niri_workspace_deriver_test.cpp
+@@ -1,5 +1,6 @@
+ #include "niri_workspace_deriver.h"
+ #include "niri_workspace_model.h"
++#include "niri_window_model.h"
+ 
+ #include <QtTest>
+ 
+@@ -174,6 +175,32 @@ private slots:
+         QCOMPARE(
+             map.value(QStringLiteral("tiledColumnCount")).toInt(), 2);
+     }
++
++    void windowModelUpdatesOnlyChangedRowAndRoles()
++    {
++        NiriWindow first = window(10, false, 1);
++        first.title = QStringLiteral("old title");
++        NiriWindow second = window(11, false, 2);
++
++        NiriWindowModel model;
++        model.setWindows({first, second});
++        QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
++        QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
++
++        first.title = QStringLiteral("new title");
++        QVERIFY(model.updateWindow(first));
++        QCOMPARE(resetSpy.count(), 0);
++        QCOMPARE(dataSpy.count(), 1);
++        QCOMPARE(dataSpy.first().at(0).value<QModelIndex>().row(), 0);
++        QCOMPARE(dataSpy.first().at(1).value<QModelIndex>().row(), 0);
++        QCOMPARE(dataSpy.first().at(2).value<QList<int>>(),
++                 QList<int>{NiriWindowModel::TitleRole});
++        QCOMPARE(model.data(model.index(0), NiriWindowModel::TitleRole).toString(),
++                 QStringLiteral("new title"));
++
++        QVERIFY(!model.updateWindow(first));
++        QCOMPARE(dataSpy.count(), 1);
++    }
+ };
+ 
+ QTEST_GUILESS_MAIN(NiriWorkspaceDeriverTest)

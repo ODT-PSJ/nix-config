@@ -3,6 +3,25 @@
 Personal NixOS configuration for an ASUS laptop running Niri and a customized
 Clavis/Quickshell desktop.
 
+## ComfyUI + SillyTavern
+
+This configuration provides a user service for ComfyUI on `127.0.0.1:8188`.
+After switching the system configuration, run:
+
+```sh
+comfyui-setup
+systemctl --user enable --now comfyui.service
+```
+
+Place a checkpoint (for example an SDXL checkpoint) in
+`~/AI/ComfyUI/models/checkpoints/`. In SillyTavern Stable Diffusion settings,
+choose `ComfyUI`, set the URL to `http://127.0.0.1:8188`, validate it, and use
+`Default_Comfy_Workflow.json`. The workflow uses SillyTavern's prompt, seed,
+resolution, sampler, and model placeholders.
+
+The setup installs the official stable NVIDIA PyTorch CUDA 13.0 wheels recommended
+by ComfyUI for NVIDIA 20-series and newer GPUs.
+
 ## Stack
 
 - NixOS unstable with Flakes and Home Manager

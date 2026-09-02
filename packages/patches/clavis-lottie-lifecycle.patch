@@ -1,0 +1,221 @@
+diff --git a/Modules/Keystone/DashboardContent/DashboardContent.qml b/Modules/Keystone/DashboardContent/DashboardContent.qml
+index c95ca70..d9a8948 100644
+--- a/Modules/Keystone/DashboardContent/DashboardContent.qml
++++ b/Modules/Keystone/DashboardContent/DashboardContent.qml
+@@ -10,6 +10,7 @@ Item {
+ 
+     property var player: null
+     property var screen: null
++    property bool active: false
+ 
+     implicitWidth: 860
+     implicitHeight: 520
+@@ -50,6 +51,7 @@ Item {
+                 anchors.bottom: parent.bottom
+                 player: root.player
+                 screen: root.screen
++                active: root.active
+             }
+         }
+     }
+diff --git a/Modules/Keystone/DashboardContent/HoleCardCarousel.qml b/Modules/Keystone/DashboardContent/HoleCardCarousel.qml
+index e644c07..bb218f0 100644
+--- a/Modules/Keystone/DashboardContent/HoleCardCarousel.qml
++++ b/Modules/Keystone/DashboardContent/HoleCardCarousel.qml
+@@ -9,6 +9,7 @@ Item {
+     property int currentIndex: 0
+     property var player: null
+     property var screen: null
++    property bool active: false
+     readonly property int cardCount: 4
+     readonly property real switchThreshold: width * 0.2
+ 
+@@ -125,7 +126,7 @@ Item {
+         DashboardMediaCard {
+             anchors.fill: parent
+             player: root.player
+-            active: root.visible && root.currentIndex === 1
++            active: root.active && root.currentIndex === 1
+         }
+     }
+ 
+@@ -137,7 +138,7 @@ Item {
+ 
+         DashboardWeatherCard {
+             anchors.fill: parent
+-            active: root.visible && root.currentIndex === 2
++            active: root.active && root.currentIndex === 2
+         }
+     }
+ 
+diff --git a/Modules/Keystone/Hub/HubContent.qml b/Modules/Keystone/Hub/HubContent.qml
+index c262e79..850ffe8 100644
+--- a/Modules/Keystone/Hub/HubContent.qml
++++ b/Modules/Keystone/Hub/HubContent.qml
+@@ -17,6 +17,7 @@ Item {
+     property var player: null
+     property var screen: null
+     property int currentIndex: 0
++    property bool active: false
+     
+     Shortcut {
+         sequence: "Tab"
+@@ -122,6 +123,7 @@ Item {
+             anchors.horizontalCenter: parent.horizontalCenter
+             player: root.player
+             screen: root.screen
++            active: root.active && root.currentIndex === 0
+             visible: root.currentIndex === 0
+             opacity: visible ? 1 : 0
+             Behavior on opacity { NumberAnimation { duration: 300 } }
+diff --git a/Modules/Keystone/Styles/Shared/KeystoneSurface.qml b/Modules/Keystone/Styles/Shared/KeystoneSurface.qml
+index e5d1527..e7bf3fe 100644
+--- a/Modules/Keystone/Styles/Shared/KeystoneSurface.qml
++++ b/Modules/Keystone/Styles/Shared/KeystoneSurface.qml
+@@ -1136,6 +1136,7 @@ Variants {
+                         
+                         player: root.currentPlayer
+                         screen: keystoneWindow.screen
++                        active: root.isHubMode
+                         currentIndex: root.hubTabIndex
+                         onCurrentIndexChanged: root.hubTabIndex = currentIndex
+                         onCloseRequested: root.showHub = false
+diff --git a/Modules/Sidebars/Left/DailyForecastTrendCard.qml b/Modules/Sidebars/Left/DailyForecastTrendCard.qml
+index 9908ac1..31aa664 100644
+--- a/Modules/Sidebars/Left/DailyForecastTrendCard.qml
++++ b/Modules/Sidebars/Left/DailyForecastTrendCard.qml
+@@ -13,6 +13,7 @@ Rectangle {
+     property int maxItems: 16
+     property int currentTab: 0
+     property bool foreground: false
++    property bool animationsActive: false
+ 
+     radius: 26
+     color: Appearance.colors.colWeatherCardSurface
+@@ -408,6 +409,7 @@ Rectangle {
+                                 iconName: dayPart.iconName || ""
+                                 night: false
+                                 style: "fill"
++                                playing: root.animationsActive
+                             }
+ 
+                             Text {
+@@ -441,6 +443,7 @@ Rectangle {
+                                 iconName: nightPart.iconName || ""
+                                 night: true
+                                 style: "fill"
++                                playing: root.animationsActive
+                             }
+                         }
+                     }
+diff --git a/Modules/Sidebars/Left/HourlyForecastTrendCard.qml b/Modules/Sidebars/Left/HourlyForecastTrendCard.qml
+index ca28a51..0dec703 100644
+--- a/Modules/Sidebars/Left/HourlyForecastTrendCard.qml
++++ b/Modules/Sidebars/Left/HourlyForecastTrendCard.qml
+@@ -13,6 +13,7 @@ Rectangle {
+     property int maxItems: 25
+     property int currentTab: 0
+     property bool foreground: false
++    property bool animationsActive: false
+ 
+     radius: 26
+     color: Appearance.colors.colWeatherCardSurface
+@@ -269,6 +270,7 @@ Rectangle {
+                                 iconName: hourItem.iconName || ""
+                                 night: hourItem.isDaylight === undefined ? false : !hourItem.isDaylight
+                                 style: "fill"
++                                playing: root.animationsActive
+                             }
+                         }
+                     }
+diff --git a/Modules/Sidebars/Left/WeatherView.qml b/Modules/Sidebars/Left/WeatherView.qml
+index 307f602..e4ac638 100644
+--- a/Modules/Sidebars/Left/WeatherView.qml
++++ b/Modules/Sidebars/Left/WeatherView.qml
+@@ -481,6 +481,7 @@ Item {
+                                 weatherCode: WeatherPlugin.currentWeatherCode
+                                 iconName: WeatherPlugin.currentIconName
+                                 night: root.currentIsNight()
++                                playing: root.presentationActive
+                             }
+                         }
+ 
+@@ -513,6 +514,7 @@ Item {
+                     height: 452
+                     sourceModel: WeatherPlugin.dailyTrendForecast
+                     foreground: root.foreground
++                    animationsActive: root.presentationActive
+                 }
+ 
+                 HourlyForecastTrendCard {
+@@ -520,6 +522,7 @@ Item {
+                     height: 286
+                     sourceModel: WeatherPlugin.hourlyForecast
+                     foreground: root.foreground
++                    animationsActive: root.presentationActive
+                 }
+ 
+                 RowLayout {
+diff --git a/Modules/Sidebars/Left/WeatherViewPreview.qml b/Modules/Sidebars/Left/WeatherViewPreview.qml
+index 3e0ff11..33f1caa 100644
+--- a/Modules/Sidebars/Left/WeatherViewPreview.qml
++++ b/Modules/Sidebars/Left/WeatherViewPreview.qml
+@@ -317,6 +317,7 @@ Item {
+                                 weatherCode: root.previewWeatherCode
+                                 iconName: root.previewIconName
+                                 night: root.previewNight
++                                playing: root.visible
+                             }
+                         }
+ 
+@@ -348,12 +349,14 @@ Item {
+                     width: parent.width
+                     height: 452
+                     sourceModel: WeatherPlugin.dailyTrendForecast
++                    animationsActive: root.visible
+                 }
+ 
+                 HourlyForecastTrendCard {
+                     width: parent.width
+                     height: 286
+                     sourceModel: WeatherPlugin.hourlyForecast
++                    animationsActive: root.visible
+                 }
+ 
+                 RowLayout {
+diff --git a/Widgets/weather/MeteoIcon.qml b/Widgets/weather/MeteoIcon.qml
+index 4381b26..2502385 100644
+--- a/Widgets/weather/MeteoIcon.qml
++++ b/Widgets/weather/MeteoIcon.qml
+@@ -70,19 +70,24 @@ Item {
+         transformOrigin: Item.Center
+         visible: root.animated && status === LottieAnimation.Ready
+         source: root.lottieSource
+-        autoPlay: true
++        autoPlay: false
+         loops: LottieAnimation.Infinite
+ 
+-        onStatusChanged: {
+-            if (status === LottieAnimation.Ready && root.playing) play()
++        function syncPlayback() {
++            if (status !== LottieAnimation.Ready)
++                return
++            if (root.animated && root.playing)
++                play()
++            else
++                pause()
+         }
+-    }
+ 
+-    onPlayingChanged: {
+-        if (!playing) lottieIcon.pause()
+-        else if (lottieIcon.status === LottieAnimation.Ready) lottieIcon.play()
++        onStatusChanged: syncPlayback()
+     }
+ 
++    onPlayingChanged: lottieIcon.syncPlayback()
++    onAnimatedChanged: lottieIcon.syncPlayback()
++
+     Image {
+         anchors.fill: parent
+         visible: !lottieIcon.visible
