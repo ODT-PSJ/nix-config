@@ -194,7 +194,10 @@ in
         homeDirectory = "/home/${username}";
         stateVersion = "26.05";
         enableNixpkgsReleaseCheck = false;
-        sessionPath = [ "$HOME/.local/state/nix/profiles/home-manager/home-path/bin" ];
+        sessionPath = [
+          "$HOME/.local/bin"
+          "$HOME/.local/state/nix/profiles/home-manager/home-path/bin"
+        ];
         sessionVariables = {
           EDITOR = "hx";
           VISUAL = "hx";
@@ -202,6 +205,8 @@ in
           BROWSER = "firefox";
         };
         packages = [
+          pkgs.blender
+          pkgs.bubblewrap
           clavisLauncher
           clipboardHistory
           pkgs.discord
@@ -235,6 +240,20 @@ in
       };
 
       xdg = {
+        dataFile."applications/blender.desktop".text = ''
+          [Desktop Entry]
+          Type=Application
+          Name=Blender
+          GenericName=3D modeler
+          Comment=3D modeling, animation, rendering and post-production
+          Exec=${pkgs.blender}/bin/blender %f
+          Icon=${pkgs.blender}/share/icons/hicolor/scalable/apps/blender.svg
+          Terminal=false
+          Categories=Graphics;3DGraphics;
+          MimeType=application/x-blender;
+          PrefersNonDefaultGPU=true
+          StartupWMClass=Blender
+        '';
         desktopEntries.wechat = {
           name = "wechat";
           genericName = "wechat";
@@ -416,6 +435,11 @@ in
           enable = true;
           enableCompletion = true;
           initExtra = ''
+            case ":$PATH:" in
+              *":$HOME/.local/bin:"*) ;;
+              *) export PATH="$HOME/.local/bin:$PATH" ;;
+            esac
+
             case ":$PATH:" in
               *":$HOME/.local/state/nix/profiles/home-manager/home-path/bin:"*) ;;
               *) export PATH="$HOME/.local/state/nix/profiles/home-manager/home-path/bin:$PATH" ;;

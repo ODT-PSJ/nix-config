@@ -30,6 +30,7 @@ pkgs.stdenvNoCC.mkDerivation {
     ./patches/clavis-fcitx-tray-icon.patch
     ./patches/clavis-runtime-stability.patch
     ./patches/clavis-lottie-lifecycle.patch
+    ./patches/clavis-displays.patch
   ];
 
   nativeBuildInputs = [ pkgs.gnutar ];

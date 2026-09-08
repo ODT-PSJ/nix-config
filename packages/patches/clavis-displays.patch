@@ -1,0 +1,1109 @@
+--- a/AppShell.qml
++++ b/AppShell.qml
+@@ -17,6 +17,7 @@
+     Component.onCompleted: {
+         I18nService.initialize();
+         WallpaperService.primaryInstance = true;
++        DisplayService.primaryInstance = true;
+     }
+ 
+     WallpaperBackground {}
+--- a/Common/WidgetState.qml
++++ b/Common/WidgetState.qml
+@@ -11,6 +11,8 @@
+ 
+     property bool leftSidebarOpen: false
+     property string leftSidebarView: "info"
++    property string leftSidebarScreenName: ""
++    onLeftSidebarOpenChanged: { if (!leftSidebarOpen) leftSidebarScreenName = ""; }
+ 
+     onQsOpenChanged: {
+         if (!qsOpen)
+--- a/Modules/Bar/Bar.qml
++++ b/Modules/Bar/Bar.qml
+@@ -14,7 +14,7 @@
+ import qs.Widgets.common
+ 
+ Variants {
+-    model: Quickshell.screens
++    model: DisplayService.barScreens
+ 
+     PanelWindow {
+         id: barWindow
+@@ -60,6 +60,7 @@
+                 }
+                 SidebarButton {
+                     id: sidebarButton
++                    screenName: barWindow.screen.name
+                 }
+                 ActiveWindow {
+                     id: activeWindow
+--- a/Modules/Bar/ActiveWindow/SidebarButton.qml
++++ b/Modules/Bar/ActiveWindow/SidebarButton.qml
+@@ -6,6 +6,7 @@
+ 
+ Item {
+     id: root
++    property string screenName: ""
+ 
+     implicitHeight: 36
+     implicitWidth: buttonRow.implicitWidth + 16
+@@ -37,6 +38,7 @@
+         spacing: 8
+ 
+         SidebarPillButton {
++            screenName: root.screenName
+             viewName: "info"
+             iconName: "notifications"
+             activeColor: Appearance.colors.colSecondary
+@@ -44,12 +46,13 @@
+         }
+ 
+         SidebarPillButton {
++            screenName: root.screenName
+             viewName: "sys"
+             iconName: "memory"
+             activeColor: Appearance.colors.colTertiary
+             activeContentColor: Appearance.colors.colOnTertiary
+         }
+ 
+-        SidebarWeatherButton {}
++        SidebarWeatherButton { screenName: root.screenName }
+     }
+ }
+--- a/Modules/Bar/ActiveWindow/SidebarPillButton.qml
++++ b/Modules/Bar/ActiveWindow/SidebarPillButton.qml
+@@ -4,6 +4,7 @@
+ 
+ Item {
+     id: root
++    property string screenName: ""
+ 
+     property string viewName: "info"
+     property string iconName: "notifications"
+@@ -41,11 +42,13 @@
+     }
+ 
+     function toggleView() {
+-        if (WidgetState.leftSidebarOpen && WidgetState.leftSidebarView === viewName) {
++        if (WidgetState.leftSidebarOpen && WidgetState.leftSidebarView === viewName
++                && WidgetState.leftSidebarScreenName === root.screenName) {
+             WidgetState.leftSidebarOpen = false;
+             return;
+         }
+ 
++        WidgetState.leftSidebarScreenName = root.screenName;
+         WidgetState.leftSidebarView = viewName;
+         WidgetState.leftSidebarOpen = true;
+     }
+--- a/Modules/Bar/ActiveWindow/SidebarWeatherButton.qml
++++ b/Modules/Bar/ActiveWindow/SidebarWeatherButton.qml
+@@ -6,6 +6,7 @@
+ 
+ Item {
+     id: root
++    property string screenName: ""
+ 
+     readonly property string temperatureText: WeatherPlugin.hasValidData ? Math.round(WeatherPlugin.currentTemperatureC) + "°" : "--°"
+     readonly property int iconSize: 20
+@@ -88,11 +89,13 @@
+     }
+ 
+     function toggleView() {
+-        if (WidgetState.leftSidebarOpen && WidgetState.leftSidebarView === "weather") {
++        if (WidgetState.leftSidebarOpen && WidgetState.leftSidebarView === "weather"
++                && WidgetState.leftSidebarScreenName === root.screenName) {
+             WidgetState.leftSidebarOpen = false;
+             return;
+         }
+ 
++        WidgetState.leftSidebarScreenName = root.screenName;
+         WidgetState.leftSidebarView = "weather";
+         WidgetState.leftSidebarOpen = true;
+     }
+--- a/Modules/Launcher/LauncherWindow.qml
++++ b/Modules/Launcher/LauncherWindow.qml
+@@ -119,6 +119,7 @@
+             return
+         }
+ 
++        root.screen = DisplayService.targetScreen("launcher", "");
+         root.visible = true
+     }
+ 
+--- a/Modules/Sidebars/SidebarHostWindow.qml
++++ b/Modules/Sidebars/SidebarHostWindow.qml
+@@ -19,7 +19,7 @@
+     readonly property var retainedScreen:
+         Brightness.getScreenByName(retainedScreenName)
+ 
+-    screen: retainedScreen || fallbackScreen
++    screen: DisplayService.targetScreen("sidebar", retainedScreenName) || fallbackScreen
+     visible: retainedScreen !== null || fallbackScreen !== null
+     color: "transparent"
+     implicitWidth: screen ? screen.width : 1920
+@@ -65,9 +65,14 @@
+                 root.retainedScreenName = requestedScreen.name;
+         }
+ 
++        function onLeftSidebarScreenNameChanged() {
++            if (WidgetState.leftSidebarScreenName)
++                root.retainedScreenName = WidgetState.leftSidebarScreenName;
++        }
++
+         function onLeftSidebarOpenChanged() {
+             if (WidgetState.leftSidebarOpen && !WidgetState.qsOpen
+-                    && Brightness.activeScreen)
++                    && !WidgetState.leftSidebarScreenName && Brightness.activeScreen)
+                 root.retainedScreenName = Brightness.activeScreen.name;
+         }
+     }
+--- a/Modules/ControlCenter/ControlCenterWindow.qml
++++ b/Modules/ControlCenter/ControlCenterWindow.qml
+@@ -4,6 +4,7 @@
+ import QtQuick.Layouts
+ import QtQuick.Window
+ import Quickshell
++import Quickshell.Io
+ import Quickshell.Wayland
+ import qs.Common
+ import qs.Services
+@@ -24,11 +25,33 @@
+     onClosed: Qt.quit()
+     Component.onCompleted: I18nService.initialize()
+ 
++    IpcHandler {
++        target: "control-center"
++        function openPage(pageId: string): bool { return root.openPage(pageId); }
++    }
++
++    Dialog {
++        id: displayConfirmation
++        anchors.centerIn: parent
++        title: qsTr("保留显示设置？")
++        modal: true
++        closePolicy: Popup.NoAutoClose
++        visible: DisplayService.confirmSeconds > 0
++        ColumnLayout {
++            Label { text: qsTr("%1 秒后自动恢复原设置").arg(DisplayService.confirmSeconds) }
++            RowLayout {
++                Button { text: qsTr("恢复原设置"); onClicked: DisplayService.revert() }
++                Button { text: qsTr("保留并保存"); highlighted: true; onClicked: DisplayService.keep() }
++            }
++        }
++    }
++
+     property real contentPadding: 8
+     property int currentPage: 0
+     property bool navExpanded: width > 900
+     readonly property var pages: [
+         ({ "id": "account", "title": qsTr("账户"), "icon": "account_circle", "source": "AccountPage.qml" }),
++        ({ "id": "displays", "title": qsTr("显示器"), "icon": "desktop_windows", "source": "DisplaysPage.qml" }),
+         ({ "id": "general", "title": qsTr("通用"), "icon": "settings", "source": "GeneralPage.qml" }),
+         ({ "id": "wallpaper", "title": qsTr("壁纸"), "icon": "wallpaper", "source": "WallpaperPage.qml" }),
+         ({ "id": "theme", "title": qsTr("主题"), "icon": "palette", "source": "ThemePage.qml" }),
+--- a/controlcenter.qml
++++ b/controlcenter.qml
+@@ -1,4 +1,5 @@
+ //@ pragma UseQApplication
++//@ pragma Env QT_QUICK_CONTROLS_STYLE=Material
+ //@ pragma Env QT_WAYLAND_DISABLE_WINDOWDECORATION=1
+ 
+ import qs.Modules.ControlCenter
+--- /dev/null
++++ b/Modules/ControlCenter/DisplayLayoutPreview.qml
+@@ -0,0 +1,86 @@
++pragma ComponentBehavior: Bound
++import QtQuick
++import QtQuick.Controls
++import qs.Common
++
++// Screen rectangles represent compositor geometry; this is a spatial editor.
++Item {
++    id: root
++    property var displays: []
++    property string selectedName: ""
++    signal selected(string name)
++    signal moved(string name, int logicalX, int logicalY)
++    implicitHeight: 230
++    function dimensions(row) {
++        const match = row.mode.match(/^(\d+)x(\d+)/);
++        const rotated = ["90", "270", "flipped-90", "flipped-270"].indexOf(row.transform) >= 0;
++        const w = match ? Number(match[1]) : 1920;
++        const h = match ? Number(match[2]) : 1080;
++        return { w: Math.round((rotated ? h : w) / row.scale), h: Math.round((rotated ? w : h) / row.scale) };
++    }
++    readonly property var bounds: {
++        let x = 0, y = 0, right = 1, bottom = 1;
++        for (const row of displays) {
++            if (!row.enabled) continue;
++            const size = dimensions(row);
++            x = Math.min(x, row.x); y = Math.min(y, row.y);
++            right = Math.max(right, row.x + size.w); bottom = Math.max(bottom, row.y + size.h);
++        }
++        return { x: x, y: y, w: right - x, h: bottom - y };
++    }
++    readonly property real factor: Math.min((width - 48) / bounds.w, (height - 40) / bounds.h)
++    Repeater {
++        model: root.displays.filter(row => row.enabled)
++        Rectangle {
++            id: monitor
++            property real dragX: 0
++            property real dragY: 0
++            transform: Translate { x: monitor.dragX; y: monitor.dragY }
++            required property var modelData
++            readonly property var size: root.dimensions(modelData)
++            x: (modelData.x - root.bounds.x) * root.factor + (root.width - root.bounds.w * root.factor) / 2
++            y: (modelData.y - root.bounds.y) * root.factor + 20
++            width: Math.max(24, size.w * root.factor)
++            height: Math.max(24, size.h * root.factor)
++            radius: 8
++            color: modelData.name === root.selectedName ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
++            border.width: modelData.name === root.selectedName ? 2 : 1
++            border.color: Appearance.colors.colPrimary
++            Label {
++                anchors.centerIn: parent
++                width: parent.width - 12
++                text: monitor.modelData.name + "\n" + monitor.size.w + " × " + monitor.size.h
++                horizontalAlignment: Text.AlignHCenter
++                wrapMode: Text.Wrap
++                font.pixelSize: 12
++                color: Appearance.colors.colOnSurface
++            }
++            MouseArea {
++                anchors.fill: parent
++                cursorShape: Qt.SizeAllCursor
++                property real startX: 0
++                property real startY: 0
++                property real savedFactor: 1
++                onPressed: mouse => {
++                    root.selected(monitor.modelData.name);
++                    const point = mapToItem(root, mouse.x, mouse.y);
++                    startX = point.x; startY = point.y; savedFactor = root.factor;
++                }
++                onPositionChanged: mouse => {
++                    if (!pressed) return;
++                    const point = mapToItem(root, mouse.x, mouse.y);
++                    monitor.dragX = point.x - startX; monitor.dragY = point.y - startY;
++                }
++                onCanceled: { monitor.dragX = 0; monitor.dragY = 0; }
++                onReleased: mouse => {
++                    const point = mapToItem(root, mouse.x, mouse.y);
++                    const dx = (point.x - startX) / savedFactor;
++                    const dy = (point.y - startY) / savedFactor;
++                    monitor.dragX = 0; monitor.dragY = 0;
++                    if (Math.abs(dx) + Math.abs(dy) > 20)
++                        root.moved(monitor.modelData.name, Math.round((monitor.modelData.x + dx) / 8) * 8, Math.round((monitor.modelData.y + dy) / 8) * 8);
++                }
++            }
++        }
++    }
++}
+--- /dev/null
++++ b/Modules/ControlCenter/DisplaysPage.qml
+@@ -0,0 +1,303 @@
++pragma ComponentBehavior: Bound
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Controls.Material
++import QtQuick.Layouts
++import Quickshell
++import Quickshell.Wayland
++import qs.Common
++import qs.Services
++import qs.Widgets.common
++import qs.Modules.FilePicker
++
++StyledFlickable {
++    id: root
++    Material.theme: PersonalizationConfig.themeMode === "light" ? Material.Light : Material.Dark
++    Material.accent: Appearance.colors.colPrimary
++    Material.foreground: Appearance.colors.colOnSurface
++    Material.background: Appearance.m3colors.m3surfaceContainerLow
++    palette.text: Appearance.colors.colOnSurface
++    palette.buttonText: Appearance.colors.colOnSurface
++    palette.windowText: Appearance.colors.colOnSurface
++    clip: true
++    contentWidth: width
++    contentHeight: body.y + body.implicitHeight + 28
++    property var draft: []
++    property bool dirty: false
++    property bool identifying: false
++    property string selectedName: ""
++    readonly property var selected: draft.find(row => row.name === selectedName) || null
++    readonly property var output: DisplayService.outputs[selectedName] || ({ modes: [] })
++    readonly property var modes: output.modes.map(mode => ({
++        label: mode.width + " × " + mode.height + " · " + (mode.refresh_rate / 1000).toFixed(2) + " Hz",
++        value: mode.width + "x" + mode.height + "@" + (mode.refresh_rate / 1000).toFixed(3)
++    }))
++    readonly property var rotations: [
++        { label: qsTr("横屏"), value: "normal" }, { label: qsTr("竖屏 · 逆时针 90°"), value: "90" },
++        { label: qsTr("横屏 · 180°"), value: "180" }, { label: qsTr("竖屏 · 顺时针 90°"), value: "270" },
++        { label: qsTr("水平翻转"), value: "flipped" }, { label: qsTr("翻转 + 90°"), value: "flipped-90" },
++        { label: qsTr("垂直翻转"), value: "flipped-180" }, { label: qsTr("翻转 + 270°"), value: "flipped-270" }
++    ]
++    readonly property var componentModes: [ {label: qsTr("所有屏幕"), value: "all"}, {label: qsTr("主屏幕"), value: "primary"}, {label: qsTr("按屏自定义"), value: "custom"} ]
++    readonly property var popupModes: [{label: qsTr("跟随操作屏幕"), value: "active"}, {label: qsTr("主屏幕"), value: "primary"}].concat(draft.map(row => ({label: row.name, value: row.name})))
++
++    function reloadDraft() {
++        draft = JSON.parse(JSON.stringify(DisplayService.settings));
++        if (!draft.some(row => row.name === selectedName)) selectedName = draft.length ? draft[0].name : "";
++        dirty = false;
++    }
++    function edit(name, key, value) {
++        const next = JSON.parse(JSON.stringify(draft));
++        const row = next.find(item => item.name === name);
++        if (!row) return;
++        row[key] = value; draft = next; dirty = true;
++    }
++    function arrange(direction) {
++        if (!selected) return;
++        const other = draft.find(row => row.name !== selectedName && row.enabled);
++        if (!other) return;
++        const size = preview.dimensions(selected), anchor = preview.dimensions(other);
++        const x = direction === "left" ? other.x - size.w : direction === "right" ? other.x + anchor.w : other.x;
++        const y = direction === "above" ? other.y - size.h : direction === "below" ? other.y + anchor.h : other.y;
++        edit(selectedName, "x", x); edit(selectedName, "y", y);
++    }
++    Component.onCompleted: { DisplayService.panelActive = true; reloadDraft(); }
++    Component.onDestruction: DisplayService.panelActive = false
++    Connections {
++        target: DisplayService
++        function onSettingsChanged() {
++            if (!root.dirty || !root.draft.length) root.reloadDraft();
++            else if (root.draft.some(row => !DisplayService.outputs[row.name])) root.reloadDraft();
++        }
++        function onBusyChanged() { if (!DisplayService.busy) { root.dirty = false; DisplayService.refresh(); } }
++    }
++    component Heading: Label {
++        Layout.fillWidth: true
++        font.family: Sizes.fontFamily
++        font.pixelSize: 20
++        font.bold: true
++        color: Appearance.colors.colOnSurface
++    }
++    component Note: Label {
++        Layout.fillWidth: true
++        wrapMode: Text.WordWrap
++        color: Appearance.colors.colSubtext
++        font.family: Sizes.fontFamily
++    }
++    component Choice: RowLayout {
++        id: choice
++        property string title: ""
++        property var options: []
++        property string value: ""
++        signal chosen(string value)
++        Layout.fillWidth: true
++        Label { text: choice.title; Layout.fillWidth: true; color: Appearance.colors.colOnSurface }
++        ComboBox {
++            Layout.preferredWidth: Math.min(290, root.width * 0.46)
++            model: choice.options
++            textRole: "label"
++            valueRole: "value"
++            currentIndex: choice.options.findIndex(option => option.value === choice.value)
++            onActivated: choice.chosen(currentValue)
++        }
++    }
++    ColumnLayout {
++        id: body
++        width: Math.min(760, root.width - 40)
++        x: (root.width - width) / 2
++        y: 24
++        spacing: 16
++        Heading { text: qsTr("显示器") }
++        Note { text: qsTr("选择屏幕调整显示参数。拖动屏幕示意图改变位置，也可用方向按钮精确贴齐。") }
++        DisplayLayoutPreview {
++            id: preview
++            Layout.fillWidth: true
++            displays: root.draft
++            selectedName: root.selectedName
++            enabled: !DisplayService.busy
++            onSelected: name => root.selectedName = name
++            onMoved: (name, logicalX, logicalY) => { root.edit(name, "x", logicalX); root.edit(name, "y", logicalY); }
++        }
++        Button { text: qsTr("识别屏幕"); onClicked: { root.identifying = true; identifyTimer.restart(); } }
++        Choice {
++            title: qsTr("当前显示器")
++            options: root.draft.map(row => ({label: row.name + (row.enabled ? "" : qsTr("（已关闭）")), value: row.name}))
++            value: root.selectedName
++            onChosen: value => root.selectedName = value
++        }
++        Note { text: root.selected ? (root.output.make || "") + " · " + (root.output.model || "") : qsTr("正在读取显示器…") }
++        ColumnLayout {
++            Layout.fillWidth: true
++            enabled: !!root.selected && !DisplayService.busy
++            Switch {
++                text: qsTr("启用此显示器")
++                checked: root.selected ? root.selected.enabled : false
++                enabled: !checked || root.draft.filter(row => row.enabled).length > 1
++                onToggled: root.edit(root.selectedName, "enabled", checked)
++            }
++            Choice {
++                title: qsTr("分辨率与刷新率")
++                options: [{label: qsTr("自动"), value: "auto"}].concat(root.modes)
++                value: root.selected ? root.selected.mode : "auto"
++                onChosen: value => root.edit(root.selectedName, "mode", value)
++            }
++            Choice {
++                title: qsTr("方向")
++                options: root.rotations
++                value: root.selected ? root.selected.transform : "normal"
++                onChosen: value => root.edit(root.selectedName, "transform", value)
++            }
++            RowLayout {
++                Layout.fillWidth: true
++                Label { text: qsTr("缩放 (%)"); Layout.fillWidth: true; color: Appearance.colors.colOnSurface }
++                SpinBox {
++                    from: 50; to: 400; stepSize: 5; editable: true
++                    value: root.selected ? Math.round(root.selected.scale * 100) : 100
++                    onValueModified: root.edit(root.selectedName, "scale", value / 100)
++                }
++            }
++            RowLayout {
++                Layout.fillWidth: true
++                Label { text: qsTr("逻辑位置 X / Y"); Layout.fillWidth: true; color: Appearance.colors.colOnSurface }
++                SpinBox { from: -32768; to: 32768; editable: true; value: root.selected ? root.selected.x : 0; onValueModified: root.edit(root.selectedName, "x", value) }
++                SpinBox { from: -32768; to: 32768; editable: true; value: root.selected ? root.selected.y : 0; onValueModified: root.edit(root.selectedName, "y", value) }
++            }
++            Flow {
++                Layout.fillWidth: true
++                spacing: 8
++                Repeater {
++                    model: [{label: qsTr("放在左侧"), value: "left"}, {label: qsTr("放在右侧"), value: "right"}, {label: qsTr("放在上方"), value: "above"}, {label: qsTr("放在下方"), value: "below"}]
++                    Button { required property var modelData; text: modelData.label; enabled: root.draft.filter(row => row.enabled).length > 1; onClicked: root.arrange(modelData.value) }
++                }
++                Button {
++                    text: qsTr("仅使用此屏幕")
++                    onClicked: {
++                        for (const row of root.draft.slice()) root.edit(row.name, "enabled", row.name === root.selectedName);
++                    }
++                }
++                Button {
++                    text: qsTr("横向扩展全部屏幕")
++                    onClicked: {
++                        let x = 0;
++                        for (const row of root.draft.slice()) {
++                            root.edit(row.name, "enabled", true); root.edit(row.name, "x", x); root.edit(row.name, "y", 0);
++                            x += preview.dimensions(row).w;
++                        }
++                    }
++                }
++            }
++            Switch {
++                text: qsTr("可变刷新率 (VRR)")
++                enabled: !!root.output.vrr_supported
++                checked: root.selected ? root.selected.vrr : false
++                onToggled: root.edit(root.selectedName, "vrr", checked)
++            }
++        }
++        RowLayout {
++            Button { text: qsTr("应用显示设置"); highlighted: true; enabled: root.dirty && !DisplayService.busy; onClicked: DisplayService.apply(root.draft) }
++            Button { text: qsTr("放弃修改"); enabled: root.dirty && !DisplayService.busy; onClicked: root.reloadDraft() }
++            BusyIndicator { running: DisplayService.busy; visible: running; Layout.preferredWidth: 32; Layout.preferredHeight: 32 }
++        }
++        Note { text: DisplayService.message; visible: text !== "" }
++        Heading { text: qsTr("每屏壁纸") }
++        Note { text: qsTr("壁纸与桌面组件策略即时保存。显示参数需要点击上方“应用显示设置”。") }
++        Switch {
++            text: qsTr("不同屏幕使用独立壁纸")
++            checked: PersonalizationConfig.perMonitorWallpaper
++            onToggled: PersonalizationConfig.setPerMonitorWallpaper(checked)
++        }
++        Image {
++            Layout.alignment: Qt.AlignHCenter
++            Layout.preferredWidth: root.selected && ["90", "270", "flipped-90", "flipped-270"].indexOf(root.selected.transform) >= 0 ? 120 : 280
++            Layout.preferredHeight: 170
++            source: {
++                const path = WallpaperService.wallpaperForScreen(root.selectedName);
++                return path && !WallpaperService.isColorSource(path) ? Paths.fileUrl(path) : "";
++            }
++            sourceSize: Qt.size(560, 340)
++            asynchronous: true
++            fillMode: Image.PreserveAspectCrop
++        }
++        RowLayout {
++            Button {
++                text: qsTr("为此屏幕选择壁纸")
++                enabled: !!root.selected && PersonalizationConfig.perMonitorWallpaper
++                onClicked: { wallpaperPicker.outputName = root.selectedName; wallpaperPicker.openAt(wallpaperPicker.picturesDir); }
++            }
++            Button {
++                text: qsTr("使用默认壁纸")
++                enabled: !!root.selected && PersonalizationConfig.perMonitorWallpaper
++                onClicked: WallpaperService.clearWallpaper(root.selectedName)
++            }
++        }
++        Choice {
++            title: qsTr("此屏幕的壁纸填充方式")
++            enabled: !!root.selected && PersonalizationConfig.perMonitorWallpaper
++            options: PersonalizationConfig.fillModes
++            value: PersonalizationConfig.monitorFillMode(root.selectedName)
++            onChosen: value => WallpaperService.setWallpaperFillModeForScreen(root.selectedName, value)
++        }
++        Heading { text: qsTr("桌面组件与屏幕策略") }
++        Note { text: qsTr("主屏幕用于安排桌面组件。指定屏幕断开时会自动回退到可用屏幕。") }
++        ColumnLayout {
++            Layout.fillWidth: true
++            enabled: DisplayService.policyReady
++            Choice {
++                title: qsTr("主屏幕")
++                options: [{label: qsTr("自动"), value: ""}].concat(root.draft.filter(row => row.enabled).map(row => ({label: row.name, value: row.name})))
++                value: DisplayService.policy.primary || ""
++                onChosen: value => DisplayService.setPolicy("primary", value)
++            }
++            Choice { title: qsTr("顶栏"); options: root.componentModes; value: DisplayService.policy.bar || "all"; onChosen: value => DisplayService.setPolicy("bar", value) }
++            Choice { title: qsTr("灵动岛"); options: root.componentModes; value: DisplayService.policy.keystone || "all"; onChosen: value => DisplayService.setPolicy("keystone", value) }
++            Switch {
++                text: qsTr("此屏幕显示顶栏")
++                visible: DisplayService.policy.bar === "custom"
++                checked: !DisplayService.policy.screens[root.selectedName] || DisplayService.policy.screens[root.selectedName].bar !== false
++                onToggled: DisplayService.setScreenPolicy(root.selectedName, "bar", checked)
++            }
++            Switch {
++                text: qsTr("此屏幕显示灵动岛")
++                visible: DisplayService.policy.keystone === "custom"
++                checked: !DisplayService.policy.screens[root.selectedName] || DisplayService.policy.screens[root.selectedName].keystone !== false
++                onToggled: DisplayService.setScreenPolicy(root.selectedName, "keystone", checked)
++            }
++            Choice { title: qsTr("侧栏位置"); options: root.popupModes; value: DisplayService.policy.sidebar || "active"; onChosen: value => DisplayService.setPolicy("sidebar", value) }
++            Choice { title: qsTr("启动器位置"); options: root.popupModes; value: DisplayService.policy.launcher || "active"; onChosen: value => DisplayService.setPolicy("launcher", value) }
++        }
++    }
++    Timer { id: identifyTimer; interval: 3000; onTriggered: root.identifying = false }
++    Variants {
++        model: root.identifying ? Quickshell.screens : []
++        PanelWindow {
++            id: identifyWindow
++            required property var modelData
++            screen: modelData
++            implicitWidth: 260
++            implicitHeight: 110
++            color: "transparent"
++            exclusionMode: ExclusionMode.Ignore
++            WlrLayershell.layer: WlrLayer.Overlay
++            WlrLayershell.namespace: "clavis-display-identify"
++            Rectangle {
++                anchors.fill: parent
++                radius: Appearance.rounding.large
++                color: Appearance.colors.colSecondaryContainer
++                Label {
++                    anchors.centerIn: parent
++                    text: identifyWindow.modelData.name
++                    font.pixelSize: 32
++                    font.family: Sizes.fontFamilyMono
++                    color: Appearance.colors.colOnSecondaryContainer
++                }
++            }
++        }
++    }
++    FilePickerWindow {
++        id: wallpaperPicker
++        property string outputName: ""
++        dialogTitle: qsTr("选择此屏幕的壁纸")
++        description: outputName
++        onAccepted: path => WallpaperService.setWallpaper(path, outputName)
++    }
++}
+--- /dev/null
++++ b/Services/DisplayService.qml
+@@ -0,0 +1,153 @@
++pragma Singleton
++import QtQuick
++import Quickshell
++import Quickshell.Io
++import Clavis.Niri 1.0
++import qs.Common
++
++Singleton {
++    id: root
++    property bool primaryInstance: false
++    property bool panelActive: false
++    property var outputs: ({})
++    property var settings: []
++    property string message: ""
++    property int confirmSeconds: 0
++    readonly property bool busy: transaction.running
++    readonly property string script: Paths.systemScriptsDir + "/manage-displays.py"
++    readonly property string configDir: (Quickshell.env("XDG_CONFIG_HOME") || Paths.homeDir + "/.config") + "/clavis"
++    property var policy: ({ primary: "", bar: "all", keystone: "all", sidebar: "active", launcher: "active", screens: {} })
++    property bool policyReady: false
++    readonly property var activeScreen: Brightness.getScreenByName(Niri.currentOutput) || Brightness.activeScreen
++    readonly property var primaryScreen: Brightness.getScreenByName(policy.primary) || (Quickshell.screens.length ? Quickshell.screens[0] : null)
++    readonly property var barScreens: filteredScreens("bar")
++    readonly property var keystoneScreens: filteredScreens("keystone")
++
++    function filteredScreens(component) {
++        const mode = policy[component] || "all";
++        return Quickshell.screens.filter(screen => {
++            if (mode === "primary") return primaryScreen && screen.name === primaryScreen.name;
++            if (mode === "custom") return !policy.screens[screen.name] || policy.screens[screen.name][component] !== false;
++            return true;
++        });
++    }
++    function targetScreen(component, requestedName) {
++        const preference = policy[component] || "active";
++        if (preference === "primary") return primaryScreen;
++        if (preference !== "active") return Brightness.getScreenByName(preference) || primaryScreen;
++        return Brightness.getScreenByName(requestedName || "") || activeScreen;
++    }
++    function setPolicy(key, value) {
++        if (!policyReady) return;
++        const next = JSON.parse(JSON.stringify(policy));
++        next[key] = value;
++        policy = next;
++        policyFile.setText(JSON.stringify(next, null, 2));
++    }
++    function setScreenPolicy(name, key, value) {
++        const next = JSON.parse(JSON.stringify(policy.screens || {}));
++        if (!next[name]) next[name] = {};
++        next[name][key] = value;
++        setPolicy("screens", next);
++    }
++    function refresh() {
++        if (!query.running) query.running = true;
++    }
++    function apply(rows) {
++        if (busy) return;
++        message = "";
++        transaction.command = ["python3", script, "apply", JSON.stringify(rows)];
++        transaction.running = true;
++    }
++    function keep() { if (confirmSeconds > 0) transaction.write("keep\n"); }
++    function revert() { if (confirmSeconds > 0) transaction.write("revert\n"); }
++    onPrimaryInstanceChanged: { if (primaryInstance) restoreTimer.restart(); }
++    onPanelActiveChanged: { if (panelActive) refresh(); }
++    Process {
++        id: query
++        command: ["python3", root.script, "list"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                try {
++                    const result = JSON.parse(text);
++                    if (result.event === "outputs") {
++                        root.outputs = result.outputs;
++                        root.settings = result.settings;
++                    } else root.message = result.message;
++                } catch (error) { root.message = String(error); }
++            }
++        }
++    }
++    Process {
++        id: transaction
++        stdinEnabled: true
++        stdout: SplitParser {
++            onRead: data => {
++                try {
++                    const result = JSON.parse(data);
++                    if (result.event === "confirm") root.confirmSeconds = result.seconds;
++                    else if (result.event === "saved") { root.message = qsTr("显示方案已保存，将在登录和插拔后恢复"); root.confirmSeconds = 0; }
++                    else if (result.event === "reverted") { root.message = qsTr("已恢复原显示设置"); root.confirmSeconds = 0; }
++                    else if (result.event === "error") root.message = result.message;
++                } catch (error) { root.message = String(error); }
++            }
++        }
++        onExited: exitCode => {
++            root.confirmSeconds = 0;
++            if (exitCode !== 0 && root.message === "") root.message = qsTr("显示设置进程异常退出");
++            root.refresh();
++        }
++    }
++    Timer {
++        interval: 1000
++        running: root.confirmSeconds > 0
++        repeat: true
++        onTriggered: root.confirmSeconds = Math.max(0, root.confirmSeconds - 1)
++    }
++    Timer {
++        interval: 4000
++        running: root.panelActive && !root.busy
++        repeat: true
++        onTriggered: root.refresh()
++    }
++    Connections {
++        target: Quickshell
++        function onScreensChanged() {
++            if (root.panelActive) root.refresh();
++            if (root.primaryInstance) restoreTimer.restart();
++        }
++    }
++    Timer {
++        id: restoreTimer
++        interval: 1800
++        onTriggered: { if (!restoreProcess.running) restoreProcess.running = true; }
++    }
++    Process {
++        id: restoreProcess
++        command: ["python3", root.script, "restore"]
++        stdout: SplitParser {
++            onRead: data => console.log("Display restore:", data)
++        }
++    }
++    Process {
++        command: ["mkdir", "-p", root.configDir]
++        running: true
++        onExited: exitCode => { if (exitCode === 0) policyFile.reload(); }
++    }
++    FileView {
++        id: policyFile
++        path: root.configDir + "/screen-policy.json"
++        watchChanges: true
++        atomicWrites: true
++        onFileChanged: reload()
++        onLoaded: {
++            try {
++                const next = JSON.parse(text());
++                if (!next.screens || typeof next.screens !== "object") next.screens = {};
++                root.policy = next;
++                root.policyReady = true;
++            } catch (error) { root.message = qsTr("屏幕策略文件读取失败：") + error; }
++        }
++        onLoadFailed: root.policyReady = true
++    }
++}
+--- /dev/null
++++ b/scripts/system/manage-displays.py
+@@ -0,0 +1,204 @@
++#!/usr/bin/env python3
++"""Niri display transactions. The child owns rollback, independently of QML."""
++import fcntl
++import json
++import math
++import os
++from pathlib import Path
++import select
++import signal
++import subprocess
++import sys
++import tempfile
++
++STATE = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'clavis' / 'displays.json'
++TRANSFORMS = {'Normal': 'normal', '90': '90', '180': '180', '270': '270',
++              'Flipped': 'flipped', 'Flipped90': 'flipped-90',
++              'Flipped180': 'flipped-180', 'Flipped270': 'flipped-270'}
++
++
++def niri(*args):
++    result = subprocess.run(['niri', 'msg', *map(str, args)], capture_output=True, text=True, timeout=8)
++    if result.returncode:
++        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
++    return result.stdout
++
++
++def outputs():
++    return json.loads(niri('--json', 'outputs'))
++
++
++def snapshot(raw):
++    result = []
++    for name, output in raw.items():
++        logical = output.get('logical')
++        mode_index = output.get('current_mode')
++        mode = output['modes'][mode_index] if mode_index is not None else None
++        result.append(dict(name=name, identity=[output.get(k) for k in ('make', 'model', 'serial')],
++                           enabled=logical is not None, mode=(f"{mode['width']}x{mode['height']}@{mode['refresh_rate']/1000:.3f}" if mode else 'auto'),
++                           scale=logical['scale'] if logical else 1,
++                           transform=TRANSFORMS.get(logical['transform'], 'normal') if logical else 'normal',
++                           x=logical['x'] if logical else 0, y=logical['y'] if logical else 0,
++                           vrr=output.get('vrr_enabled', False)))
++    return result
++
++
++def validate(rows, raw):
++    if not isinstance(rows, list) or not rows:
++        raise ValueError('没有可应用的显示器')
++    if len({row['name'] for row in rows}) != len(rows):
++        raise ValueError('显示器重复')
++    current = {row['name']: row for row in snapshot(raw)}
++    for row in rows:
++        name = row['name']
++        if name not in raw:
++            raise ValueError(f'显示器已断开：{name}')
++        if type(row['enabled']) is not bool or type(row['vrr']) is not bool:
++            raise ValueError('无效的开关状态')
++        scale = row['scale']
++        if not isinstance(scale, (float, int)) or not math.isfinite(scale) or not 0.5 <= scale <= 4:
++            raise ValueError('缩放必须在 50% 至 400% 之间')
++        if row['transform'] not in TRANSFORMS.values():
++            raise ValueError('无效的旋转方向')
++        for axis in ('x', 'y'):
++            if type(row[axis]) is not int or abs(row[axis]) > 32768:
++                raise ValueError('无效的屏幕坐标')
++        modes = {f"{m['width']}x{m['height']}@{m['refresh_rate']/1000:.3f}" for m in raw[name]['modes']}
++        if row['mode'] != 'auto' and row['mode'] not in modes:
++            raise ValueError(f'{name} 不支持所选显示模式')
++        if row['vrr'] and not raw[name].get('vrr_supported'):
++            raise ValueError(f'{name} 不支持可变刷新率')
++        row['identity'] = [raw[name].get(k) for k in ('make', 'model', 'serial')]
++        current[name] = row
++    if not any(row['enabled'] for row in current.values()):
++        raise ValueError('必须保留至少一块开启的屏幕')
++    return rows
++
++
++def apply(rows, best_effort=False):
++    errors = []
++    connected = outputs()
++    # Enable and configure usable screens before disabling any other screen.
++    commands = []
++    for row in rows:
++        if row['name'] not in connected or not row['enabled']:
++            continue
++        name = row['name']
++        commands.extend([(name, 'on'), (name, 'mode', row['mode']),
++                         (name, 'scale', row['scale']), (name, 'transform', row['transform']),
++                         (name, 'position', 'set', '--', row['x'], row['y'])])
++        if connected[name].get('vrr_supported'):
++            commands.append((name, 'vrr', 'on' if row['vrr'] else 'off'))
++    for command in commands:
++        try:
++            niri('output', *command)
++        except Exception as error:
++            if not best_effort:
++                raise
++            errors.append(str(error))
++    for row in rows:
++        if row['name'] in connected and not row['enabled']:
++            try:
++                live = outputs()
++                if sum(o.get('logical') is not None for o in live.values()) <= 1 and live[row['name']].get('logical'):
++                    continue
++                niri('output', row['name'], 'off')
++            except Exception as error:
++                if not best_effort:
++                    raise
++                errors.append(str(error))
++    if errors:
++        raise RuntimeError('; '.join(errors))
++
++
++def save(rows):
++    STATE.parent.mkdir(parents=True, exist_ok=True)
++    previous = json.loads(STATE.read_text()) if STATE.exists() else []
++    merged = {row['name']: row for row in previous}
++    merged.update({row['name']: row for row in rows})
++    fd, filename = tempfile.mkstemp(dir=STATE.parent, prefix='.displays-')
++    try:
++        with os.fdopen(fd, 'w') as stream:
++            json.dump(list(merged.values()), stream, ensure_ascii=False, indent=2)
++            stream.flush()
++            os.fsync(stream.fileno())
++        os.replace(filename, STATE)
++    finally:
++        if os.path.exists(filename):
++            os.unlink(filename)
++
++
++def emit(event, **values):
++    try:
++        print(json.dumps(dict(event=event, **values), ensure_ascii=False), flush=True)
++    except BrokenPipeError:
++        pass  # A closed control center must not interrupt rollback.
++
++
++def transaction(rows):
++    raw = outputs()
++    before = snapshot(raw)
++    rows = validate(rows, raw)
++    def interrupted(*_):
++        raise RuntimeError('控制面板已关闭，恢复原显示设置')
++    signal.signal(signal.SIGTERM, interrupted)
++    signal.signal(signal.SIGHUP, interrupted)
++    try:
++        apply(rows)
++        emit('confirm', seconds=20)
++        ready, _, _ = select.select([sys.stdin], [], [], 20)
++        if ready and sys.stdin.readline().strip() == 'keep':
++            actual = snapshot(outputs())
++            requested = {row['name']: row for row in rows}
++            actual = [row if row['enabled'] else requested.get(row['name'], row) for row in actual]
++            save(actual)
++            emit('saved')
++            return
++    except Exception as error:
++        emit('error', message=str(error))
++    finally:
++        signal.signal(signal.SIGTERM, signal.SIG_IGN)
++        signal.signal(signal.SIGHUP, signal.SIG_IGN)
++    apply(before, best_effort=True)
++    emit('reverted')
++
++
++def main():
++    action = sys.argv[1]
++    if action == 'list':
++        raw = outputs()
++        rows = snapshot(raw)
++        if STATE.exists():
++            saved = {row['name']: row for row in json.loads(STATE.read_text())}
++            rows = [dict(saved[row['name']], enabled=False)
++                    if not row['enabled'] and row['name'] in saved
++                    and saved[row['name']].get('identity') == row['identity'] else row for row in rows]
++        emit('outputs', outputs=raw, settings=rows)
++        return
++    STATE.parent.mkdir(parents=True, exist_ok=True)
++    with (STATE.parent / 'displays.lock').open('w') as lock:
++        try:
++            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
++        except BlockingIOError:
++            if action == 'restore':
++                return
++            raise RuntimeError('另一项显示器调整正在进行')
++        if action == 'apply':
++            transaction(json.loads(sys.argv[2]))
++        elif action == 'restore' and STATE.exists():
++            raw = outputs()
++            rows = [row for row in json.loads(STATE.read_text()) if row['name'] in raw
++                    and row.get('identity') == [raw[row['name']].get(k) for k in ('make', 'model', 'serial')]]
++            if rows:
++                # If the only connected saved screen was disabled, keep it usable.
++                if not any(r['enabled'] for r in rows) and len(rows) == len(raw):
++                    rows[0]['enabled'] = True
++                apply(validate(rows, raw))
++
++
++if __name__ == '__main__':
++    try:
++        main()
++    except Exception as error:
++        emit('error', message=str(error))
++        sys.exit(1)
+--- /dev/null
++++ b/tests/test_manage_displays.py
+@@ -0,0 +1,115 @@
++"""Exercise display safety with a stateful compositor substitute, without changing hardware."""
++import copy
++import importlib.util
++import io
++import json
++from pathlib import Path
++import tempfile
++import unittest
++from unittest.mock import patch
++
++spec = importlib.util.spec_from_file_location('displays', Path(__file__).parents[1] / 'scripts/system/manage-displays.py')
++m = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(m)
++
++
++def fixture():
++    return {name: dict(name=name, make='Test', model=name, serial=None,
++        modes=[dict(width=1920, height=1080, refresh_rate=60000)], current_mode=0,
++        logical=dict(x=index * 1920, y=0, width=1920, height=1080, scale=1, transform='Normal'),
++        vrr_supported=False, vrr_enabled=False) for index, name in enumerate(['A', 'B'])}
++
++
++class DisplayTests(unittest.TestCase):
++    def setUp(self):
++        self.raw = fixture()
++        self.calls = []
++        self.temp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.state = patch.object(m, 'STATE', Path(self.temp.name) / 'displays.json')
++        self.state.start(); self.addCleanup(self.state.stop)
++        self.out = patch.object(m, 'outputs', lambda: copy.deepcopy(self.raw))
++        self.out.start(); self.addCleanup(self.out.stop)
++        self.signals = patch.object(m.signal, 'signal')
++        self.signals.start(); self.addCleanup(self.signals.stop)
++        self.events = patch.object(m, 'emit')
++        self.emit = self.events.start(); self.addCleanup(self.events.stop)
++
++    def test_reject_all_off_before_commands(self):
++        rows = m.snapshot(self.raw)
++        for row in rows: row['enabled'] = False
++        with patch.object(m, 'niri') as command, self.assertRaises(ValueError):
++            m.transaction(rows)
++        command.assert_not_called()
++
++    def test_reject_unsupported_mode_scale_and_rotation(self):
++        for key, value in [('mode', '999x999@60.000'), ('scale', float('nan')), ('transform', 'invalid'), ('x', 0.5), ('vrr', True)]:
++            rows = m.snapshot(self.raw); rows[0][key] = value
++            with self.subTest(key=key), self.assertRaises(ValueError): m.validate(rows, self.raw)
++
++    def test_timeout_and_closed_input_restore_without_saving(self):
++        before = m.snapshot(self.raw)
++        for ready, answer in [([], ''), ([io.StringIO()], ''), ([io.StringIO()], 'revert\n')]:
++            with patch.object(m, 'apply') as apply, patch.object(m.select, 'select', return_value=(ready, [], [])), patch.object(m.sys, 'stdin', io.StringIO(answer)):
++                draft = copy.deepcopy(before); draft[0]['transform'] = '90'
++                m.transaction(draft)
++                self.assertEqual(apply.call_args_list[-1].args[0], before)
++                self.assertTrue(apply.call_args_list[-1].kwargs['best_effort'])
++                self.assertFalse(m.STATE.exists())
++
++    def test_partial_failure_rolls_back(self):
++        with patch.object(m, 'apply', side_effect=[RuntimeError('mode failed'), None]) as apply:
++            m.transaction(m.snapshot(self.raw))
++            self.assertEqual(apply.call_count, 2)
++            self.emit.assert_any_call('error', message='mode failed')
++            self.emit.assert_any_call('reverted')
++
++    def test_keep_persists_disabled_screen_orientation(self):
++        rows = m.snapshot(self.raw)
++        rows[1].update(enabled=False, transform='90', scale=1.5)
++        def apply(_): self.raw['B'].update(logical=None, current_mode=None)
++        with patch.object(m, 'apply', side_effect=apply), patch.object(m.select, 'select', return_value=([1], [], [])), patch.object(m.sys, 'stdin', io.StringIO('keep\n')):
++            m.transaction(rows)
++        saved = {r['name']: r for r in json.loads(m.STATE.read_text())}
++        self.assertEqual(saved['B']['transform'], '90')
++        self.assertEqual(saved['B']['mode'], '1920x1080@60.000')
++        self.assertEqual(saved['B']['scale'], 1.5)
++        self.assertFalse(saved['B']['enabled'])
++
++    def test_save_failure_rolls_back(self):
++        with patch.object(m, 'apply') as apply, patch.object(m, 'save', side_effect=OSError('disk full')), patch.object(m.select, 'select', return_value=([1], [], [])), patch.object(m.sys, 'stdin', io.StringIO('keep\n')):
++            m.transaction(m.snapshot(self.raw))
++            self.assertEqual(apply.call_count, 2)
++            self.emit.assert_any_call('reverted')
++
++    def test_enable_before_disable_and_protect_last_output(self):
++        def command(*args):
++            self.calls.append(args)
++            if args[2] == 'off': self.raw[args[1]]['logical'] = None
++        with patch.object(m, 'niri', side_effect=command):
++            rows = m.snapshot(self.raw); rows[0]['enabled'] = False
++            m.apply(rows)
++            self.assertLess(self.calls.index(('output', 'B', 'on')), self.calls.index(('output', 'A', 'off')))
++            rows[1]['enabled'] = False
++            m.apply(rows)
++        self.assertIsNotNone(self.raw['B']['logical'])
++
++    def test_disconnected_saved_screen_preserved(self):
++        m.save(m.snapshot(self.raw))
++        m.save(m.snapshot({'A': self.raw['A']}))
++        self.assertEqual(len(json.loads(m.STATE.read_text())), 2)
++
++    def test_restore_only_disabled_connected_screen(self):
++        rows = m.snapshot(self.raw); rows[0]['enabled'] = False
++        m.save(rows); del self.raw['B']
++        with patch.object(m.sys, 'argv', ['manage-displays', 'restore']), patch.object(m, 'apply') as apply:
++            m.main()
++            self.assertTrue(apply.call_args.args[0][0]['enabled'])
++
++    def test_restore_does_not_apply_to_replaced_monitor(self):
++        m.save(m.snapshot(self.raw)); self.raw['A']['model'] = 'Replacement'; del self.raw['B']
++        with patch.object(m.sys, 'argv', ['manage-displays', 'restore']), patch.object(m, 'apply') as apply:
++            m.main(); apply.assert_not_called()
++
++
++if __name__ == '__main__': unittest.main()
+--- a/Modules/Keystone/Styles/Shared/KeystoneSurface.qml
++++ b/Modules/Keystone/Styles/Shared/KeystoneSurface.qml
+@@ -32,7 +32,8 @@
+         if (instances.length === 0)
+             return "KEYSTONE_UNAVAILABLE";
+ 
+-        const instance = instances[0];
++        const target = DisplayService.activeScreen;
++        const instance = instances.find(item => target && item.screen.name === target.name) || instances[0];
+         if (!instance || typeof instance[methodName] !== "function")
+             return "KEYSTONE_UNAVAILABLE";
+         return instance[methodName]();
+@@ -54,7 +55,7 @@
+         return invoke("tools");
+     }
+ 
+-    model: Quickshell.screens
++    model: DisplayService.keystoneScreens
+ 
+     PanelWindow {
+         id: keystoneWindow
