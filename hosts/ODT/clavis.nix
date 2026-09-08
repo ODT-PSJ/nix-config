@@ -160,6 +160,18 @@ let
       exec qs ipc --pid "$clavisPid" call keystone tools
     '';
   };
+  clavisToggleComponents = pkgs.writeShellApplication {
+    name = "clavis-toggle-components";
+    runtimeInputs = with pkgs; [ quickshell systemd ];
+    text = ''
+      clavisPid="$(systemctl --user show clavis-shell.service --property MainPID --value)"
+      if [[ -z "$clavisPid" || "$clavisPid" == "0" ]]; then
+        echo "clavis-shell.service is not running" >&2
+        exit 1
+      fi
+      exec qs ipc --pid "$clavisPid" call display toggleComponents
+    '';
+  };
   clavisShell = pkgs.writeShellApplication {
     name = "clavis-shell";
     runtimeInputs = [
@@ -258,6 +270,7 @@ in
     clavisCore
     clavisShell
     clavisTools
+    clavisToggleComponents
     qt6Packages.qt5compat
     qt6Packages.qtlottie
   ];

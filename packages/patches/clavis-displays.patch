@@ -1,11 +1,16 @@
 --- a/AppShell.qml
 +++ b/AppShell.qml
-@@ -17,6 +17,7 @@
+@@ -17,6 +17,12 @@
      Component.onCompleted: {
          I18nService.initialize();
          WallpaperService.primaryInstance = true;
 +        DisplayService.primaryInstance = true;
      }
++
++    IpcHandler {
++        target: "display"
++        function toggleComponents(): bool { return DisplayService.toggleComponents(); }
++    }
  
      WallpaperBackground {}
 --- a/Common/WidgetState.qml
@@ -607,7 +612,7 @@
 +}
 --- /dev/null
 +++ b/Services/DisplayService.qml
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,173 @@
 +pragma Singleton
 +import QtQuick
 +import Quickshell
@@ -636,11 +641,31 @@
 +    function filteredScreens(component) {
 +        const mode = policy[component] || "all";
 +        return Quickshell.screens.filter(screen => {
++            if (mode === "none") return false;
 +            if (mode === "primary") return primaryScreen && screen.name === primaryScreen.name;
 +            if (mode === "custom") return !policy.screens[screen.name] || policy.screens[screen.name][component] !== false;
 +            return true;
 +        });
 +    }
++    property var componentVisibilityBackup: null
++    function toggleComponents() {
++        if (!policyReady) return false;
++        const next = JSON.parse(JSON.stringify(policy));
++        if (next.bar === "none" && next.keystone === "none") {
++            const backup = componentVisibilityBackup || ({ bar: "all", keystone: "all" });
++            next.bar = backup.bar;
++            next.keystone = backup.keystone;
++            componentVisibilityBackup = null;
++        } else {
++            componentVisibilityBackup = ({ bar: next.bar, keystone: next.keystone });
++            next.bar = "none";
++            next.keystone = "none";
++        }
++        policy = next;
++        policyFile.setText(JSON.stringify(next, null, 2));
++        return true;
++    }
++
 +    function targetScreen(component, requestedName) {
 +        const preference = policy[component] || "active";
 +        if (preference === "primary") return primaryScreen;
