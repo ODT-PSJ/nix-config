@@ -518,15 +518,18 @@ in
           settings = {
             logo = {
               type = "builtin";
-              source = "nixos";
-              padding = { right = 3; };
+              # Keep the logo compact so long hardware values stay on one line
+              # in narrow terminals.
+              source = "nixos_small";
+              padding = { right = 2; };
               color = {
                 "1" = "cyan";
                 "2" = "blue";
               };
             };
             display = {
-              separator = "  › ";
+              separator = " › ";
+              disableLinewrap = true;
               brightColor = true;
               color = {
                 keys = "cyan";
@@ -547,8 +550,8 @@ in
               { type = "display"; key = "󰍹 显示"; }
               { type = "shell"; key = "󰆍 Shell"; }
               { type = "terminal"; key = " 终端"; }
-              { type = "cpu"; key = " 处理器"; }
-              { type = "gpu"; key = "󰢮 显卡"; }
+              { type = "cpu"; key = " 处理器"; format = "{name}"; }
+              { type = "gpu"; key = "󰢮 显卡"; format = "{name}"; }
               { type = "memory"; key = " 内存"; }
               { type = "disk"; key = "󰋊 磁盘"; }
               { type = "battery"; key = "󰁹 电池"; }
